@@ -1,5 +1,5 @@
 {
-    "name": "Eugene/SQLPreprocessor",
+    "name": "EugeneErg/SQLPreprocessor",
     "description": "sql preprocessor",
     "version": "0.0.0",
     "license": "MIT",
@@ -8,7 +8,7 @@
     },
     "autoload": {
 		"psr-4": {
-            "Eugene\\SQLPreprocessor\\": "src/"
+            "EugeneErg\\SQLPreprocessor\\": "src/"
         }
     }
 }
