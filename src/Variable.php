@@ -1,0 +1,100 @@
+<?php namespace EugeneErg\SQLPreprocessor;
+
+final class Variable {
+	const IS_TABLE_CONTENT;
+	const IS_TABLE_NAME;
+	const IS_TABLE_FIELD;
+	private $type;
+	private $name;
+	private $field;
+	private $fields = [];
+	private $keys = [];
+	private $values = [];	
+	private function __clone() {}
+	private function __wakeup() {}
+	
+	private static function canBeString($value) {
+		try {
+			$value = "{$value}";
+		}
+		catch (\Exception $e) {
+			throw new \Exception('Value must be able to be converted to a string');
+		}
+		return true;
+	}
+	private function setKeys($keys) {
+		$this->keys = [];
+		foreach ($keys as $key => $default) {
+			if (is_integer($key)) {
+				$key = $default;
+				$default = null;
+			}
+			if (isset($this->keys[$key])) {
+				throw new \Exception('You can not specify the same name of fields in a table');
+			}
+			$this->keys[$key] = $default;
+		}
+	}
+	public function __construct($nameOrValue, $keys = []) {
+		if (isset($this->type)) {
+			throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
+		}
+		$this->setKeys((array) $keys);
+		if (is_array($nameOrValue)) {
+			$this->type = Self::IS_TABLE_CONTENT;
+			$this->values = $nameOrValue;
+		}
+		else {
+			$this->type = Self::IS_TABLE_NAME;
+			$this->name = $nameOrValue;
+		}
+	}
+	public function getType() {
+		return $this->type;
+	}
+	public function getValue() {
+		switch ($type) {
+			case Self::IS_TABLE_NAME: return $this->name;
+			case Self::IS_TABLE_FIELD: return [$this->name, $this->field];
+			case Self::IS_TABLE_CONTENT:
+				$result = [];
+				$keys = count($this->keys) ? $this->keys : array_keys($this->fields);
+				foreach ($this->values as $values) {
+					$values = (array) $values;
+					$num = 0;
+					foreach ($keys as $key => $default) {
+						if (isset($values[$num])) {
+							$value = $values[$num];
+						}
+						elseif (isset($values[$key])) {
+							$value = $values[$key];
+						}
+						else {
+							$value = $default;
+						}
+						$result[][$key] = $value;
+						Self::canBeString($value);
+						$num++;
+					}
+				}
+				return $result;
+		}
+	}
+	public function __get($name) {
+		if ($this->type == Self::IS_TABLE_FIELD) {
+			throw new \Exception('Table field can not have child fields');
+		}
+		if (!isset($this->fields[$name])) {
+			if (count($this->keys) && !isset($this->keys[$name])) {
+				throw new \Exception('In this table there is no field with this name');
+			}
+			$this->fields[$name] = clone $this;
+			$this->fields[$name]->type = Self::IS_TABLE_FIELD;
+			$this->fields[$name]->field = $name;
+		}
+		return $this->fields[$name];
+	}
+	public function __call($name, $args) {
+		return call_user_func_array([new SQL($this), $name], $args);
+	}
+}
