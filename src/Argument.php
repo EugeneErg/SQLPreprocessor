@@ -26,7 +26,7 @@ final class Argument {
 				if ($arg instanceof Variable) {
 					return $this->type = Self::IS_VARIABLE;
 				}
-				elseif ($arg instance of SQL) {
+				elseif ($arg instanceof SQL) {
 					return $this->type = Self::IS_FUNCTION;
 				}
 				break;

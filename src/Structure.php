@@ -114,7 +114,7 @@ class Structure {
 				$result->union[] = $functions[$i];
 				continue;
 			}
-			if ($canBeChild && isset($this->childs[])) {
+			if ($canBeChild && isset($this->childs[$name])) {
 				$child = $this->childs[$name];
 				if ($child->value->max_count > 0
 					&& isset($result[$name])
