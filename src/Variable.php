@@ -1,9 +1,9 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
 final class Variable {
-	const IS_TABLE_CONTENT;
-	const IS_TABLE_NAME;
-	const IS_TABLE_FIELD;
+	const IS_TABLE_CONTENT = 'content';
+	const IS_TABLE_NAME = 'name';
+	const IS_TABLE_FIELD = 'field';
 	private $type;
 	private $name;
 	private $field;
@@ -14,15 +14,9 @@ final class Variable {
 	private function __wakeup() {}
 	
 	private static function canBeString($value) {
-		try {
-			$value = "{$value}";
-		}
-		catch (\Exception $e) {
-			throw new \Exception('Value must be able to be converted to a string');
-		}
-		return true;
+		return (string) $value;
 	}
-	private function setKeys($keys) {
+	private function setKeys(array $keys) {
 		$this->keys = [];
 		foreach ($keys as $key => $default) {
 			if (is_integer($key)) {
@@ -53,7 +47,7 @@ final class Variable {
 		return $this->type;
 	}
 	public function getValue() {
-		switch ($type) {
+		switch ($this->type) {
 			case Self::IS_TABLE_NAME: return $this->name;
 			case Self::IS_TABLE_FIELD: return [$this->name, $this->field];
 			case Self::IS_TABLE_CONTENT:

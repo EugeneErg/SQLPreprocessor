@@ -8,7 +8,7 @@ class Structure {
 	private $max_count = 0;
 	private $min_count = 0;
 
-	public function __construct($min_count = 0, $max_count = 0, $unions = []) {
+	public function __construct($min_count = 0, $max_count = 0, array $unions = []) {
 		$this->min_count = $min_count;
 		$this->max_count = $max_count;
 		foreach ($unions as $key => $union) {
@@ -23,22 +23,16 @@ class Structure {
 			}
 		}
 	}
-	public function addBlock($key, $block = null) {
-		if (!is_null($block) && !is_a($block, get_called_class())) {
-			throw new \Exception('Следующий блок должен быть null, либо структурным');
-		}
+	public function addBlock($key, Self $block = null) {
 		if (isset($this->next[$key])) {
 			throw new \Exception('Блок с данным ключем уже был выбран');
 		}
 		$this->next[$key] = $block;
 	}
-	private static function array_union($a, $b) {
+	private static function array_union(array $a, array $b) {
 		return array_merge(array_diff($a, $b), array_intersect($a, $b), array_diff($b, $a));
 	}
-	public function addChild($key, $block, $levels = []) {
-		if (!is_a($block, get_called_class())) {
-			throw new \Exception('Следующий блок должен быть структурным');
-		}
+	public function addChild($key, Self $block, $levels = []) {
 		$key = (string) $key;
 		if (isset($this->childs[$key]) && $this->childs[$key]->value !== $block) {
 			throw new \Exception('Блок с данным ключем уже был выбран');
@@ -63,7 +57,7 @@ class Structure {
 			'levels' => $this->levels,
 		];
 	}
-	private function isValidChildLevels($childs, $levels) {
+	private function isValidChildLevels(array $childs, array $levels = null) {
 		foreach ($this->childs as $child) {
 			if ((is_null($levels)
 				|| !count($child->levels)
@@ -83,7 +77,7 @@ class Structure {
 		return $levels;
 	}
 	
-	private function inlineValidation($functions, &$pos = 0) {
+	private function inlineValidation(array $functions, &$pos = 0) {
 		$return = $result = (object) [
 			'union' => [],
 			'childs' => [],
@@ -94,10 +88,11 @@ class Structure {
 		if (!count($structure->next)
 			&& count($structure->childs)
 				&& $pos > 0
-					&& !is_a($functions[$pos - 1], SqlNew::class)
+					&& !is_array($functions[$pos - 1])
 		) {
 			//обявляем существование завершающей функции для текущего блока
-			$structure->addBlock("end{$functions[$pos - 1]->name}");
+			$name = $functions[$pos - 1]->getName();
+			$structure->addBlock("end{$name}");
 		}
 		
 		$canBeUnion = true;
@@ -105,26 +100,27 @@ class Structure {
 		$canBeClose = true;
 		
 		for ($i = $pos; $i < count($functions); $i++) {
-			if ($canBeChild && is_a($functions[$i], SqlNew::class)) {
+			if ($canBeChild && is_array($functions[$i])) {
 				//структура является вложенной и закрывает текущий блок
-				$result->childs = $this->validation($functions[$i]->getFunctions());
+				$result->childs = $this->validation($functions[$i]);
 				//не могут быть дочерними и закрывающими, только следующий блок
 				$canBeUnion = false;
 				$canBeChild = false;
 				$canBeClose = false;
 				continue;
 			}
-			if ($canBeUnion && isset($this->union[$functions[$i]->name])) {
+			$name = $functions[$i]->getName();
+			if ($canBeUnion && isset($this->union[$name])) {
 				$result->union[] = $functions[$i];
 				continue;
 			}
-			if ($canBeChild && isset($this->childs[$functions[$i]->name])) {
-				$child = $this->childs[$functions[$i]->name];
+			if ($canBeChild && isset($this->childs[])) {
+				$child = $this->childs[$name];
 				if ($child->value->max_count > 0
-					&& isset($result[$functions[$i]->name])
-						&& ($count = count($result[$functions[$i]->name]) + 1) > $child->value->max_count
+					&& isset($result[$name])
+						&& ($count = count($result[$name]) + 1) > $child->value->max_count
 				) {
-					throw new \Exception("Для блока {$functions[$i]->name} превышено допустимое максимальное количество использований: {$count} > {$child->value->max_count}");
+					throw new \Exception("Для блока {$name} превышено допустимое максимальное количество использований: {$count} > {$child->value->max_count}");
 				}
 				if (!is_null($levels)
 					&& !count($child->levels == [] ? $levels : $levels = array_intersect($levels, $child->levels))
@@ -132,13 +128,13 @@ class Structure {
 					throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');
 				}
 				$newChild = $child->value->inlineValidation($functions, ++$i);
-				$newChild->function = $functions[$i]->name;
-				$result->childs[$functions[$i]->name][] = $newChild;
+				$newChild->function = $functions[$i];
+				$result->childs[$name][] = $newChild;
 				$i--;//после дочерних юнион не бывает, либо другие дочерние, либо следующий, либо закрывающий блок
 				$canBeUnion = false;
 				continue;
 			}
-			if (isset($structure->next[$functions[$i]->name])) {
+			if (isset($structure->next[$name])) {
 				$result = $result->next = (object) [
 					'union' => [],
 					'childs' => [],
@@ -149,7 +145,7 @@ class Structure {
 				$canBeClose = true;
 				continue;
 			}
-			if ($canBeClose && array_key_exists($functions[$i]->name, $structure->next)) {
+			if ($canBeClose && array_key_exists($name, $structure->next)) {
 				$levels = $this->isValidChildLevels($result->childs, $levels);
 				$result->end = $functions[$i];
 			}
@@ -157,7 +153,7 @@ class Structure {
 		}
 		return $return;
 	}
-	public function validation($functions) {
+	public function validation(array $functions) {
 		$results = [];
 
 		if (!count($this->childs)) {
@@ -173,16 +169,16 @@ class Structure {
 			return $results;
 		}
 		for ($i = 0; $i < count($functions); $i++) {
-			if (!isset($this->childs[$functions[$i]->name])) {
+			if (!isset($this->childs[$functions[$i]->getName()])) {
 				throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');//не нашлось подходящих дочерних блоков - структура невалидная
 			}
-			$child = $this->childs[$functions[$i]->name];
+			$child = $this->childs[$functions[$i]->getName()];
 			if (!is_null($levels) && !count($child->levels == [] ? $levels : $levels = array_intersect($levels, $child->levels))) {
 				throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');//не осталось подходяших уровней - структура невалидная
 			}
 			$newChild = $child->value->inlineValidation($functions, ++$i);
 			$newChild->function = $functions[$i];
-			$results[$functions[$i]->name][] = $newChild;
+			$results[$functions[$i]->getName()][] = $newChild;
 			$i--;
 		}
 		$this->isValidChildLevels($results, $levels);
