@@ -15,4 +15,10 @@ final class SQLFunction {
 	function getArgs() {
 		return $this->args;
 	}
+	public function __debugInfo() {
+		return [
+			'name' => $this->name,
+			'argCount' => count($this->args),
+		];
+	}
 }

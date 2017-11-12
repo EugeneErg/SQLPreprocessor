@@ -79,8 +79,8 @@ final class Variable {
 			throw new \Exception('Table field can not have child fields');
 		}
 		if (!isset($this->fields[$name])) {
-			if (count($this->keys) && !isset($this->keys[$name])) {
-				throw new \Exception('In this table there is no field with this name');
+			if (count($this->keys) && !array_key_exists($name, $this->keys)) {
+				throw new \Exception("In this table there is no field with this name '{$name}'");
 			}
 			$this->fields[$name] = clone $this;
 			$this->fields[$name]->type = Self::IS_TABLE_FIELD;

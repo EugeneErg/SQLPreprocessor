@@ -48,7 +48,7 @@ final class SQL {
 			$insert = new Structure();
 		$update = new Structure(1);
 		$delete = new Structure(1);
-		$return = new Structure(1, 1);//ретерн не имеет дочерних блоков, поэтому не будет нуждаться в закрывающей функции
+		$return = new Structure(0, 1);//ретерн не имеет дочерних блоков, поэтому не будет нуждаться в закрывающей функции
 				
 		
 		//блок if
@@ -61,6 +61,7 @@ final class SQL {
 		//блок switch
 		$switch->addBlock('case', $case);
 		$switch->addBlock('default', $default);
+		$case->addBlock('case', $case);
 		$case->addBlock('default', $default);
 		$case->addBlock('endswitch');
 		$default->addBlock('endswitch');
@@ -156,6 +157,7 @@ final class SQL {
 		return $this->hash;
 	}
 	public function __invoke() {
-		$this->structure()->validation($this->functions);
+		$functions = $this->structure()->validation($this->functions);
+		dd($functions);
 	}
 }
