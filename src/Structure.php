@@ -107,7 +107,7 @@ class Structure {
 			if ($canBeChild && is_array($function)) {
 				//структура является вложенной и закрывает текущий блок
 				//_log("дочерние блоки функции вложены в массив");
-				if (!count($structure->childs)) {
+				if (!count($this->childs)) {
 					$result->next = $this->validation($function);
 					break;
 				}
@@ -145,13 +145,13 @@ class Structure {
 			if (isset($this->next[$name])) {
 				//_log("находим следующий блок");
 				$result = $result->next = $this->next[$name]->inlineValidation($functions, $i);
-				$i++;
+				break;
 			}
-			elseif ($canBeClose && (array_key_exists($name, $this->next) || $name === $endName)) {
+			if ($canBeClose && (array_key_exists($name, $this->next) || $name === $endName)) {
 				//_log("находим закрывающий блок {$name}");
 				$levels = $this->isValidChildLevels($result->childs, $levels);
 				$result->end = $function;
-				$i++;
+				break;
 			}
 			$i--;
 			break;
