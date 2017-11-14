@@ -5,12 +5,14 @@
 	include_once 'src/SQLFunction.php';
 	include_once 'src/Structure.php';
 	include_once 'src/SQL.php';
+	include_once 'src/Query.php';
 	
 	use EugeneErg\SQLPreprocessor\Argument;
 	use EugeneErg\SQLPreprocessor\Variable;
 	use EugeneErg\SQLPreprocessor\SQLFunction;
 	use EugeneErg\SQLPreprocessor\Structure;
 	use EugeneErg\SQLPreprocessor\SQL;
+	use EugeneErg\SQLPreprocessor\Query;
 	
 	function dd() {
 		$res = '<? ';
@@ -55,14 +57,16 @@
 			}
 			->select('description')->{
 				SQL()->
-				switch($var->description)->
-					case('')->
+				switch($var->description)->{
+					SQL()->case('')->
 						return('description is not clear')->
-					case(null)->
-						return('description is not set')->
-					default->
-						return($var->description)->
-				endswitch
+					case(null)->{
+						SQL()->return('description is not set')
+					}->
+					default->{
+						SQL()->return($var->description)
+					}
+				}
 			}
 		};
 	

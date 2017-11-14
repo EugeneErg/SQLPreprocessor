@@ -15,6 +15,13 @@ final class SQLFunction {
 	function getArgs() {
 		return $this->args;
 	}
+	function getValues() {
+		$result = [];
+		foreach ($this->args as $arg) {
+			$result[] = $arg->getValue();
+		}
+		return $result;
+	}
 	public function __debugInfo() {
 		return [
 			'name' => $this->name,

@@ -4,15 +4,10 @@ final class SQL {
 	
 	private $functions = [];
 	private $hash;
-	private $index;
 	
 	private function __clone() {}
 	private function __wakeup() {}
 
-	private function index() {
-		static $i = 0;
-		return $i++;
-	}
 	private function hashes($hash = null) {
 		static $hashes = [];
 		if (is_null($hash)) {
@@ -25,7 +20,6 @@ final class SQL {
 	}
 	private function __construct() {
 		$this->hash = $this->hashes();
-		$this->index = $this->index();
 	}
 	private static function structure() {
 		static $structure;
@@ -83,9 +77,9 @@ final class SQL {
 		
 		//блок var if else case default orderby groupby update insert
 		foreach (['var', 'if', 'else', 'case', 'default', 'orderby', 'groupby', 'insert', 'update', 'select'] as $name) {
-			$$name->addChild('switch', $switch, 0);
-			$$name->addChild('if', $if, 1);
-			$$name->addChild('return', $return, 2);
+			$$name->addChild('switch', $switch, 'switch');
+			$$name->addChild('if', $if, 'if');
+			$$name->addChild('return', $return, 'return');
 		}
 		
 		
@@ -98,7 +92,7 @@ final class SQL {
 		
 		
 		//блок select
-		$select->addChild('select', $select, 3);
+		$select->addChild('select', $select, 'select');
 		
 		
 		//блок into
@@ -109,10 +103,10 @@ final class SQL {
 		$structure->addChild('from', $from);
 		$structure->addChild('var', $var);
 		
-		$structure->addChild('select', $select, 0);
-		$structure->addChild('into', $into, 1);
-		$structure->addChild('update', $update, 2);
-		$structure->addChild('delete', $delete, 3);
+		$structure->addChild('select', $select, 'select');
+		$structure->addChild('into', $into, 'insert');
+		$structure->addChild('update', $update, 'update');
+		$structure->addChild('delete', $delete, 'delete');
 		
 		return $structure;
 	}
@@ -136,7 +130,6 @@ final class SQL {
 	public function __debugInfo() {
 		return [
 			'hash' => $this->hash,
-			'index' => $this->index,
 		];
 	}
 	public function __call($name, $args) {
@@ -144,7 +137,8 @@ final class SQL {
 		return $this;
 	}
 	public static function __callStatic($name, $args) {
-		return call_user_func_array([new Self(), $name], $args);
+		$sql = new Self();
+		return $sql->__call($name, $args);
 	}
 	public function __get($name) {
 		if (!is_null($sql = $this->hashes($name))) {
@@ -156,8 +150,52 @@ final class SQL {
 	public function __toString() {
 		return $this->hash;
 	}
+	private function fromStructureValidation($value, $structure) {
+		$value->query = call_user_func_array([$structure->query, 'addChild'], $value->function->getValues());
+	}
+	private function deleteStructureValidation($value, $structure) {
+		$value->query = call_user_func_array([$structure->query, 'addDeleted'], $value->function->getValues());
+	}
+	private function switchStructureValidation($value, $structure) {
+		
+	}
+	private function ifStructureValidation($value, $structure) {
+		
+	}
+	private function intoStructureValidation($value, $structure) {
+		
+	}
+	private function returnStructureValidation($value, $structure) {
+		
+	}
+	private function selectStructureValidation($value, $structure) {
+		
+	}
+	private function varStructureValidation($value, $structure) {
+		
+	}
+	private function orderbyStructureValidation($value, $structure) {
+		
+	}
+	private function groupbyStructureValidation($value, $structure) {
+		
+	}
+	private function getQueryTree(\StdClass $structure, array $keys) {
+		foreach ($keys as $key) {
+			if (isset($structure->childs[$key])) {
+				foreach ($structure->childs[$key] as $value) {
+					$this->{"{$key}StructureValidation"}($value, $structure);
+					$this->getQueryTree($value, $keys);
+				}
+			}
+		}
+	}
 	public function __invoke() {
-		$functions = $this->structure()->validation($this->functions);
-		dd($functions);
+		$structure = new \StdClass();
+		$structure->childs = Self::structure()->validation($this->functions, $levels);
+		$structure->query = new Query();
+		$type = reset($levels);
+		$this->getQueryTree($structure, ['from', 'delete']);
+		dd($structure);
 	}
 }

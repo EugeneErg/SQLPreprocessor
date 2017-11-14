@@ -89,6 +89,6 @@ final class Variable {
 		return $this->fields[$name];
 	}
 	public function __call($name, $args) {
-		return call_user_func_array([new SQL($this), $name], $args);
+		return call_user_func_array([SQL::create($this), $name], $args);
 	}
 }

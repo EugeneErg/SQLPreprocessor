@@ -111,7 +111,8 @@ class Structure {
 					$result->next = $this->validation($function);
 					break;
 				}
-				$result->childs = $this->validation($function);
+				$result->childs = $this->validation($function, $childLevels);
+				$result->childsLevels = $childLevels;
 				//не могут быть дочерними и закрывающими, только следующий блок
 				$canBeUnion = false;
 				$canBeChild = false;
@@ -170,6 +171,7 @@ class Structure {
 			if (!isset($this->next[$name])) {
 				throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');
 			}
+			$i = 0;
 			$result = $this->next[$name]->inlineValidation($functions, $i);
 			if (isset($functions[$i + 1])) {
 				throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');
@@ -177,7 +179,7 @@ class Structure {
 			return $result;
 		}
 	}
-	public function validation(array $functions) {
+	public function validation(array $functions, &$levels = null) {
 		//_log('анализируем новый структурный массив --------------------------------');
 		if (!count($this->childs) && count($this->next)) {
 			return $this->validationNext($functions);

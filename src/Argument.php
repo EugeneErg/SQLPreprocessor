@@ -39,6 +39,9 @@ final class Argument {
 		}
 		throw new \Exception("Invalid function argument type '{$type}'");
 	}
+	public function getValue() {
+		return $this->value;
+	}
 	function __construct($arg) {
 		$this->value = $arg;
 		if (Self::IS_ARRAY == $this->type = $this->getType()) {
