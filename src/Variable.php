@@ -7,6 +7,7 @@ final class Variable {
 	private $type;
 	private $name;
 	private $field;
+	private $parent;
 	private $fields = [];
 	private $keys = [];
 	private $values = [];	
@@ -45,6 +46,12 @@ final class Variable {
 	}
 	public function getType() {
 		return $this->type;
+	}
+	public function getTableVar() {
+		if ($this->type == Self::IS_TABLE_FIELD) {
+			return $this->parent;
+		}
+		return $this;
 	}
 	public function getValue() {
 		switch ($this->type) {
@@ -85,10 +92,11 @@ final class Variable {
 			$this->fields[$name] = clone $this;
 			$this->fields[$name]->type = Self::IS_TABLE_FIELD;
 			$this->fields[$name]->field = $name;
+			$this->fields[$name]->parent = $this;
 		}
 		return $this->fields[$name];
 	}
 	public function __call($name, $args) {
-		return call_user_func_array([SQL::create($this), $name], $args);
+		return call_user_func_array([SQL::from($this), $name], $args);
 	}
 }

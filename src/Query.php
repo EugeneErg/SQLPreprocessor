@@ -20,6 +20,7 @@ final class Query {
 	private static $queries = [];
 	private $deleted = [];
 	private $childs = [];
+	private $fields = [];
 	
 	private function __clone() {}
 	private function __wakeup() {}
@@ -72,7 +73,7 @@ final class Query {
 		$query->branch = $this->branch;
 		$query->parent = $this;
 		$this->isSubQuery = true;
-		return $parent->childs[$query->context] = $query;
+		return $this->childs[$query->context] = $query;
 	}
 	public function addDeleted(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
 		$query = $this->addChild($var, $join, $offset, $limit, $distinct);
@@ -80,5 +81,60 @@ final class Query {
 			throw new \Exception('Невозможно удаление из коррелированного запроса');
 		}
 		$this->deleted[$query->context] = $query;
+	}
+	final public function setOneChildAsRoot() {
+		if (!count($this->childs)) {
+			return $this;
+		}
+		$nextParent = null;
+		foreach ($this->childs as $child) {
+			if ($child->isCorrelate()) {
+				continue;
+			}
+			if (isset($nextParent)) {
+				return $this;
+			}
+			$nextParent = $child;
+		}
+		if (is_null($nextParent)) {
+			return $this;
+		}
+		foreach ($this->childs as $context => $child) {
+			if ($child != $nextParent) {
+				$child->parent = $nextParent;
+				$nextParent->childs[$context] = $child;
+			}
+		}
+		$nextParent->deleted = $this->deleted;
+		//unset(self::$queries[$this->branch][$this->context]);нельзя удалять т.к. сбой индексов
+		$nextParent->parent = null;
+		$nextParent->isSubQuery = true;
+		return $nextParent;
+	}
+	public function find($context, $branch = null) {
+		if (is_null($branch)) {
+			$branch = $this->branch;
+		}
+		if (is_object($context)) {
+			$context = spl_object_hash($context);
+		}
+		if (!isset(self::$queries[$branch][$context])) {
+			throw new \Exception('не существует запроса ' . $context);
+		}
+		return self::$queries[$branch][$context];
+	}
+	public function field($field = null) {
+		if (is_null($field)) {
+			return $this->fields[];
+		}
+		if (isset($this->fields[$field])) {
+			return $this->fields[$field];
+		}
+	}
+	final public function addField($hash, $type, &$function, $isContainsAggregate = null) {
+		$field = new Field($this, $hash, $type);
+		$field->function = &$function;
+		$field->isContainsAggregate = $isContainsAggregate;
+		return $field;
 	}
 }
