@@ -6,6 +6,7 @@ final class Argument {
 	const IS_SCALAR = 'scalar';
 	const IS_VARIABLE = 'variable';
 	const IS_FUNCTION = 'function';
+	const IS_FIELD = 'field';
 	const IS_NULL = 'null';
 
 	private $type;
@@ -31,6 +32,9 @@ final class Argument {
 				elseif ($arg instanceof SQL) {
 					return $this->type = Self::IS_FUNCTION;
 				}
+                elseif ($arg instanceof Field) {
+                    return $this->type = Self::IS_FIELD;
+                }
 				break;
 			default:
 				if (is_scalar($this->value)) {
@@ -42,10 +46,14 @@ final class Argument {
 	public function getValue() {
 		return $this->value;
 	}
-	function __construct($arg) {
-		$this->value = $arg;
+    public function setValue($arg) {
+        $this->value = $arg;
 		if (Self::IS_ARRAY == $this->type = $this->getType()) {
 			$this->value = Self::byArray($arg);
 		}
+        return $this->value;
+    }
+	function __construct($arg) {
+		$this->setValue($arg);
 	}
 }

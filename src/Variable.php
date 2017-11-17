@@ -56,7 +56,7 @@ final class Variable {
 	public function getValue() {
 		switch ($this->type) {
 			case Self::IS_TABLE_NAME: return $this->name;
-			case Self::IS_TABLE_FIELD: return [$this->name, $this->field];
+			case Self::IS_TABLE_FIELD: return $this->field;
 			case Self::IS_TABLE_CONTENT:
 				$result = [];
 				$keys = count($this->keys) ? $this->keys : array_keys($this->fields);
@@ -97,6 +97,15 @@ final class Variable {
 		return $this->fields[$name];
 	}
 	public function __call($name, $args) {
-		return call_user_func_array([SQL::from($this), $name], $args);
+		return call_user_func_array([SQL::from($this, $this), $name], $args);
 	}
+    public function __invoke($variable) {
+		$context = $this->getTableVar();
+		if ($variable instanceof Self
+			&& $variable->getTableVar() === $context
+		) {
+			return SQL::from($variable);
+		}
+        return SQL::from($context, $variable);
+    }
 }

@@ -6,6 +6,7 @@
 	include_once 'src/Structure.php';
 	include_once 'src/SQL.php';
 	include_once 'src/Query.php';
+	include_once 'src/Field.php';
 	
 	use EugeneErg\SQLPreprocessor\Argument;
 	use EugeneErg\SQLPreprocessor\Variable;
@@ -13,6 +14,7 @@
 	use EugeneErg\SQLPreprocessor\Structure;
 	use EugeneErg\SQLPreprocessor\SQL;
 	use EugeneErg\SQLPreprocessor\Query;
+	use EugeneErg\SQLPreprocessor\Field;
 	
 	function dd() {
 		$res = '<? ';

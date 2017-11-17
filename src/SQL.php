@@ -185,192 +185,82 @@ final class SQL {
     }
     final private function getQueryInfo(Query $fQuery, Query $query) {
         /*
-            $var->count() - SQL::from($var)->count() - посчитать количество * в контексте $var
-            SQL::from($var, $var)->count() - посчитать количество * в контексте $var
-            $var->id->count() - SQL::from($var->id)->count() - посчитать количество $var->id в текущем контектсе
-            SQL::from($var, $var->id)->count() - посчитать количество $var->id в контексте $var
-            SQL::from('var')->count() - посчитать количество переменых в текущем контектсе
-            SQL::from($var, 'var')->count() - посчитать количество переменных в контексте запроса $var
-            SQL::count() - SQL::from($context)->count()посчитать количество * в текущем контексте
-            SQL::from('var') - получить значение переменной
+            $var->id->function() => SQL::from($var, $var->id)->function()
+            $var('id')->function() => SQL::from($var, 'id')->function()
+            $var($var2->id)->function() => SQL::from($var, $var2->id)->function()
+            $var($var2('id'))->function => SQL::from($var, SQL::from($var2, 'id'))->function()
+            SQL::from('id')
+            SQL::from($var->id)
         */
         if (!count($fQuery->functions)) {
             throw new \Exception('аргументом не может быть пустой запрос');
         }
-        if ($fQuery->functions[0]->getName() == 'from') {
-            $from = $fQuery->functions[0];
-            unset($fQuery->functions[0]);
-            $args = $from->getArgs();
-            switch (count($args)) {
-                case 0:
-                    throw new \Exception('Неправильное количество аргументов');
-                case 1:
-                    switch ($args[0]->getType()) {
-                        case Argument::IS_VARIABLE:
-                            $variable = $args[0]->getValue();
-                            if ($variable->getType() != Variable::IS_TABLE_FIELD) {
-                                $context = $query;
-                                $object = $variable;
-                            }
-                            else {
-                                $context = $variable;
-                                $object = null;
-                            }
-                            break;
-                        case Argument::IS_SCALAR:
-                            $object = $args[0]->getValue();//название переменной, объявленной в структуре
-                            $context = $query;
-                        default:
-                            throw new \Exception('Неправильное значение аргумента');
-                    }
-                    break;
-                case 2:
-                default:
-                    
-            }
+        if ($fQuery->functions[0]->getName() != 'from') {
+            return $query->addField(null, $fQuery->functions);
         }
-        else {
-            $context = $query;
-            $object = null;
-        }
-        
-        if (count($args) > 1) {
-            if ($args[1] instanceof Variable) {
-                return $this->getQeuryInfoByVariable($args[0], $args[1]);
-            }
-            return $this->getQeuryInfoByString($args[0], $args[1]);
-        }
-        if (count($functions) == 1 && $functions[0]->getName() == 'from') {
-            switch (count($args = $functions[0]->getArgs())) {
-                case 1:
-                    if ($functions[0]->args[0]->type != 'string') {
-                        throw new \Exception('Переменная должна быть строкой');
-                    }
-                    return (object)array (
-                        'type' => 'Variable',
-                        'name' => $functions[0]->args[0]->value,
-                        'index' => null,
-                        'function' => null,
-                        'query' => $query,
-                    );
-                case 2:
-                    if ($functions[0]->args[1]->type != 'string') {
-                        throw new \Exception('Переменная должна быть строкой');
-                    }
-                    switch ($functions[0]->args[0]->type) {
-                        case 'string':
-                            $query = self::getContext($functions[0]->args[0]->value);
-                            break;
-                        case 'object ' . Variable::class:
-                            $query = 'Object #' . $functions[0]->args[0]->value;
-                            break;
-                        default:
-                        throw new \Exception('Переменная должна быть строкой');
-                    }
-                    
-                    return (object)array (
-                        'type' => 'Variable',
-                        'name' => $functions[0]->args[1]->value,
-                        'index' => null,
-                        'function' => null,
-                        'query' => $this->query->find($query),
-                    );
-                default:
-                    
-            }
-        }
-        
-        //это агрегатная функция с названием контекста, и аргументами
-        if ($functions[0]->name == 'from') {
-            if (self::cnt($functions[0]->args) != 1) {
-                throw new \Exception('Неправильное количество аргументов');
-            }
-            switch ($functions[0]->args[0]->type) {
-                case 'string':
-                    $query = self::getContext($functions[0]->args[0]->value);
-                    break;
-                case 'object ' . Variable::class:
-                    $query = 'Object #' . $functions[0]->args[0]->value;
-                    break;
-                default:
-                throw new \Exception('Переменная должна быть строкой');
-            }
-            
-            unset($functions[0]);
-            
-            return (object)array(
-                'type' => 'Function',
-                'index' => null,
-                'function' => &$functions,
-                'query' => $this->query->find($query),
-            );
-        }
-        else {
-            return (object)array(
-                'type' => 'Function',
-                'index' => null,
-                'function' => &$functions,
-                'query' => $query,
-            );
-        }
-    }
-    private function getFieldByArg(Argument $argument, Query $query) {
-        $varHash = spl_object_hash($value = $arg->getValue());
-        if (isset($this->fields[$varHash])) {
-            return $this->fields[$varHash];
-        }
-        switch ($arg->getType()) {
-            case Argument::IS_VARIABLE:
-                if ($value->getType != Variable::IS_TABLE_FIELD) {
-                    $fieldHash = '*';
+        $from = array_shift($fQuery->functions);
+        $args = $from->getArgs();
+        $context = $query;
+        switch (count($args)) {
+            case 0:
+                return $this->getQueryInfo($fQuery, $query);
+            case 2:
+            default:
+                if ($args[0]->getType() != Argument::IS_VARIABLE) {
+                    throw new \Exception('Первым параметром ожидается объект переменной');
                 }
-                else {
-                    $fieldHash = 'Field ' . $value->getValue()[1];
+                $context = $query
+                    ->find($args[0]
+                    ->getValue()
+                    ->getTableVar());
+                $args[0] = $args[1];
+            case 1:
+                $value = $args[0]->getValue();
+                switch ($args[0]->getType()) {
+                    case Argument::IS_FUNCTION:
+                        $this->getUseArgumentArgs($args[0], $context);
+                        $value = $args[0]->getValue();
+                        break;
+                    case Argument::IS_SCALAR:
+                        break;
+                    case Argument::IS_VARIABLE:
+                        $vContext = $query
+                            ->find($value
+                            ->getTableVar());
+                        if ($vContext !== $context) {
+                            $value = $context->addField($value);
+                        }
+                    default:
+                        throw new \Exception('Неправильный тип аргумента');
                 }
-                $outputQuery = $this->query->find($tableVar = $value->getTableVar());
-                if (is_null($this->fields[$varHash] = $outputQuery->field($fieldHash))) {
-                    $this->fields[$varHash] = $outputQuery->addField($varHash, 'Field', $value);
+                $field = $context->addField($value, $fQuery->functions);
+                foreach ($fQuery->functions as $function) {
+                    $this->getUseFunctionArgs($function, $context);
                 }
-            case Argument::IS_FUNCTION:
-                $var = $this->getQueryInfo($value->functions, $query);
-
-                $outputQuery = $var->query;
-                if ($var->type == 'Function') {
-                    $fieldHash = $varHash;
-                    
-                    $this->getUseFunctionArgs(SQLFunction $function, Query $query)
-                    $this->getVarLink($var->function, $var->query);
-                    $this::validationAggregates($var->function);
-                    
-                    $outputQuery->isSubQuery(!empty($var->function[0]->is_aggregates));
+                if ($context !== $query) {
+                    return $query->addField($field);
                 }
-                else {
-                    $fieldHash = 'Variable ' . $var->name;
-                    unset($var->name);
-                }
-                if (is_null($this->fields[$varHash] = $outputQuery->field($fieldHash))) {
-                    $this->fields[$varHash] = $outputQuery->addField($fieldHash, $var->type, $var->function);
-                }
-                break;
+                return $field;
         }
-        return $this->fields[$varHash];
     }
     private function getUseArgumentArgs(Argument $argument, Query $query) {
-        switch ($argument->getType()) {
-            case Argument::IS_ARRAY:
-                foreach ($argument->getValue() as $arg) {
-                    $this->getUseArgumentArgs($arg, $query);
-                }
-                break;
-            case Argument::IS_VARIABLE:
-            case Argument::IS_FUNCTION:
-            
-            $query->addNeed($field, $field->query);
-            $arg = (object)array (
-                'type' => 'uses',
-                'value' => $field,
-            );
+        if (Argument::IS_ARRAY == $type = $argument->getType()) {
+            foreach ($argument->getValue() as $arg) {
+                $this->getUseArgumentArgs($arg, $query);
+            }
+            return;
         }
+        if ($type == Argument::IS_VARIABLE) {
+            $field = $query->addField($argument->getValue());
+        }
+        elseif ($type == Argument::IS_FUNCTION) {
+            $field = $this->getQueryInfo($argument->getValue(), $query);
+            
+        }
+        else {
+            return;
+        }
+        $argument->setValue($field);
     }
     private function getUseFunctionArgs(SQLFunction $function, Query $query) {
         foreach ($function->getArgs() as $arg) {
@@ -417,5 +307,8 @@ final class SQL {
         $this->getQueryTree($structure, ['from', 'delete']);
         $structure = $this->tryMoveFirstChildQueryToRoot($structure);
         $this->getUseArgs($structure);
+    }
+    public function getFunctions() {
+        return $this->functions;
     }
 }
