@@ -146,7 +146,7 @@ final class Query {
         $object = $field->getObject();
         $context = $field->getContext();
         if (is_scalar($object)) {
-            $hash = 'Scalar ' . $object;
+            $hash = 'SCALAR ' . $object;
         }
         elseif (is_object($object)) {
             $hash = spl_object_hash($object);
@@ -170,5 +170,45 @@ final class Query {
     }
     public function addField($object = null, array $functions = []) {
         return new Field($this, $object, $functions);
+    }
+    public function getVariable($name) {
+        return $this->variable[$name];
+    }
+    public function addVariable(array $childs, $name) {
+        return $this->variable[$name] = $this->addField($childs);
+    }
+    public function addSelect(array $childs) {
+        $field = $this->addField($childs);
+        /*
+            необходимо также добавить в извлекаемые поля
+        */
+        return $field;
+    }
+    public function addOrderby(array $childs, $asc = true) {
+        $this->orderby[] = (object) [
+            'field' => $field = $this->addField($childs),
+            'asc' => $asc,
+        ];
+        return $field;
+    }
+    public function addGroupby(array $childs, $asc = true) {
+        return $this->orderby[] = $this->addField($childs);
+    }
+    public function addInsert(array $childs, $table_name, $field_name) {
+        if (isset($this->insert[$table_name][$field_name])) {
+            throw new \Exception('нельзя установить два значения для одного поля');
+        }
+        return $this->insert[$table_name][$field_name] = $this->addField($childs);
+    }
+    public function addUpdate(array $childs, Variable $variable) {
+        if ($variable->getType() != Variable::IS_TABLE_FIELD) {
+            throw new \Exception('Неправильный тип аргумента');
+        }
+        $hash = spl_object_hash($variable);
+        $this->update[$hash] = (object) [
+            'key' => $variable,
+            'value' => $field = $this->addField($childs),
+        ];
+        return $field;
     }
 }

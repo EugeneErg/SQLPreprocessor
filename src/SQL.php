@@ -83,6 +83,9 @@ final class SQL {
             $$name->addChild('return', $return, 'return');
         }
         
+        $var->addBlock('var', $var);
+        $var->addBlock('endvar');
+        
         
         $orderby->addBlock('orderby', $orderby);
         $orderby->addBlock('endorderby');
@@ -143,41 +146,104 @@ final class SQL {
     public function __toString() {
         return $this->hash;
     }
-    private function fromStructureValidation($value, $structure) {
-        $value->query = call_user_func_array([$structure->query, 'addChild'], $value->function->getValues());
+    private static function getContext($context) {
+        switch(getType($context)) {
+            case 'object':
+                return spl_object_hash($context);
+            case 'NULL':
+                return 'NULL';
+            default:
+                if (is_scalar($context)) {
+                    return 'SCALAR ' . $context;
+                }
+                throw new \Exception('неизвестный тип переменной ' . print_r($context,true));
+        }
     }
-    private function deleteStructureValidation($value, $structure) {
-        $value->query = call_user_func_array([$structure->query, 'addDeleted'], $value->function->getValues());
+    private function fromStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $value->query = call_user_func_array([$query, 'addChild'], $value->function->getValues());
     }
-    private function switchStructureValidation($value, $structure) {
-        
+    private function deleteStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $value->query = call_user_func_array([$query, 'addDeleted'], $value->function->getValues());
     }
-    private function ifStructureValidation($value, $structure) {
-        
+    private function selectStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
+        if (!count($args)) {
+            $val = null;
+        }
+        elseif ($args[0]->getType() == 'NULL') {
+            $val = '';
+        }
+        else {
+            $val = $args[0]->getValue();
+        }
+        $hash = Self::getContext($val);
+        if (isset($structure->select->childs[$hash])) {
+            throw new \Exception('нельзя использовать одинаковые ключи для двух соседних селектов');
+        }
+        $structure->select->childs[$hash] = $value->select = new \StdClass();
+        $value->select->key = $val;
+        $value->select->childs = [];
+        if (!isset($value->childs['select'])) {
+            $value->select->result = $query->addSelect($value->childs);
+        }
     }
-    private function intoStructureValidation($value, $structure) {
-        
+    private function varStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
+        if (!count($args) || $args[0]->getType() != 'scalar') {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        $query->addVariable($value->childs, $args[0]->getValue());
+        if (isset($value->next)) {
+            $this->varStructureValidation($value->next, $structure, $query);
+        }
     }
-    private function returnStructureValidation($value, $structure) {
-        
+    private function orderbyStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
+        $query->addOrderby($value->childs, !count($args) || !empty($args[0]->getValue()));
+        if (isset($value->next)) {
+            $this->orderbyStructureValidation($value->next, $structure, $query);
+        }
     }
-    private function selectStructureValidation($value, $structure) {
-        
+    private function groupbyStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $query->addGroupby($value->childs);
+        if (isset($value->next)) {
+            $this->groupbyStructureValidation($value->next, $structure, $query);
+        }
     }
-    private function varStructureValidation($value, $structure) {
-        
+    private function updateStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        if (!count($args)) {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        $query->addUpdate($value->childs, $args[0]->getValue());
+        if (isset($value->next)) {
+            $this->updateStructureValidation($value->next, $structure, $query);
+        }
     }
-    private function orderbyStructureValidation($value, $structure) {
-        
+    private function intoStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
+        if (!count($args) || $args[0]->getType() != 'scalar') {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        $value->insertTable = $args[0]->getValue();
     }
-    private function groupbyStructureValidation($value, $structure) {
-        
+    private function insertStructureValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
+        if (!count($args) || $args[0]->getType() != 'scalar') {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        $query->addInsert($value->childs, $structure->insertTable, $args[0]->getValue());
+        if (isset($value->next)) {
+            $this->insertStructureValidation($value->next, $structure, $query);
+        }
     }
     private function getQueryTree(\StdClass $structure, array $keys) {
+        if (isset($structure->query)) {
+            $query = $structure->query;
+        }
         foreach ($keys as $key) {
             if (isset($structure->childs[$key])) {
                 foreach ($structure->childs[$key] as $value) {
-                    $this->{"{$key}StructureValidation"}($value, $structure);
+                    $this->{"{$key}StructureValidation"}($value, $structure, $query);
                     $this->getQueryTree($value, $keys);
                 }
             }
@@ -219,6 +285,11 @@ final class SQL {
                         $value = $args[0]->getValue();
                         break;
                     case Argument::IS_SCALAR:
+                        $value = $context->getVariable($value);
+                        if (is_null($value->getAgregateLevel())) {
+                            $this->getUseFunctions($value->getObject(), $context);
+                            $value->setAgregateLevel();
+                        }
                         break;
                     case Argument::IS_VARIABLE:
                         $vContext = $query->find($value);
@@ -293,15 +364,20 @@ final class SQL {
         }
         return $structure;
     }
-    private function cutTreeByFunctionName(\StdClass $structure, array $keys) {
-        
-        
-        foreach ($keys as $key) {
-            if (isset($structure->childs[$key])) {
-                foreach ($structure->childs[$key] as $value) {
-                    $this->{"{$key}StructureValidation"}($value, $structure);
-                    $this->getQueryTree($value, $keys);
+    private function cutTreeByFunctionName(\StdClass $structure, array $keys, array $delete = [], Query $query = null) {
+        if (isset($structure->query)) {
+            $query = $structure->query;
+        }
+        foreach ($structure->childs as $key => $values) {
+            $is_nedded_key = in_array($key, $keys);
+            foreach ($values as $value) {
+                if ($is_nedded_key) {
+                    $this->{"{$key}StructureValidation"}($value, $structure, $query);
                 }
+                $this->cutTreeByFunctionName($value, $keys, $delete, $query);
+            }
+            if ($is_nedded_key || in_array($key, $delete)) {
+                unset($structure->childs[$key]);
             }
         }
     }
@@ -310,9 +386,12 @@ final class SQL {
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->query = new Query();
         $type = reset($levels);
-        $this->getQueryTree($structure, ['from', 'delete']);
+        $this->getQueryTree($structure, ['from', 'delete', 'var'], $structure->query);
         $structure = $this->tryMoveFirstChildQueryToRoot($structure);
+        $structure->select = new \StdClass();
+        $structure->select->childs = [];
         $this->getUseArgs($structure);
+        $this->cutTreeByFunctionName($structure, ['orderby', 'groupby', 'insert', 'into', 'select'], ['var']);
         
     }
 }

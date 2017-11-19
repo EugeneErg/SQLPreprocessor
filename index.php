@@ -47,6 +47,9 @@
 	}
 	
 	$query = sql()->from($var = new Variable('tabel_name', ['id', 'name', 'description']))
+            ->var('test')
+                ->return(12)
+            ->endvar
 		->endfrom
 		->select()->{
 			select('id')->{
