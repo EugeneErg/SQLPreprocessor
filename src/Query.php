@@ -205,6 +205,9 @@ final class Query {
             throw new \Exception('Неправильный тип аргумента');
         }
         $hash = spl_object_hash($variable);
+        if (isset($this->update[$hash])) {
+            throw new \Exception('нельзя установить два значения для одного поля');
+        }
         $this->update[$hash] = (object) [
             'key' => $variable,
             'value' => $field = $this->addField($childs),
