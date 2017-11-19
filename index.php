@@ -71,5 +71,6 @@
 				}
 			}
 		};
-	
-	$query();
+	$query('mysql', function($query) {
+        dd($query);
+    });

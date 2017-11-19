@@ -209,10 +209,7 @@ final class SQL {
                 if ($args[0]->getType() != Argument::IS_VARIABLE) {
                     throw new \Exception('Первым параметром ожидается объект переменной');
                 }
-                $context = $query
-                    ->find($args[0]
-                    ->getValue()
-                    ->getTableVar());
+                $context = $query->find($args[0]->getValue());
                 $args[0] = $args[1];
             case 1:
                 $value = $args[0]->getValue();
@@ -224,9 +221,7 @@ final class SQL {
                     case Argument::IS_SCALAR:
                         break;
                     case Argument::IS_VARIABLE:
-                        $vContext = $query
-                            ->find($value
-                            ->getTableVar());
+                        $vContext = $query->find($value);
                         if ($vContext !== $context) {
                             $value = $context->addField($value);
                         }
@@ -234,9 +229,7 @@ final class SQL {
                         throw new \Exception('Неправильный тип аргумента');
                 }
                 $field = $context->addField($value, $fQuery->functions);
-                foreach ($fQuery->functions as $function) {
-                    $this->getUseFunctionArgs($function, $context);
-                }
+                $this->getUseFunctions($fQuery->functions, $context);//необходимо вычислять агрегатные уровни функций в объявленном контектсе
                 if ($context !== $query) {
                     return $query->addField($field);
                 }
@@ -244,27 +237,30 @@ final class SQL {
         }
     }
     private function getUseArgumentArgs(Argument $argument, Query $query) {
+        $level = 0;
         if (Argument::IS_ARRAY == $type = $argument->getType()) {
             foreach ($argument->getValue() as $arg) {
-                $this->getUseArgumentArgs($arg, $query);
+                $level = max($level, $this->getUseArgumentArgs($arg, $query));
             }
-            return;
         }
-        if ($type == Argument::IS_VARIABLE) {
-            $field = $query->addField($argument->getValue());
+        elseif ($type == Argument::IS_VARIABLE) {
+            $argument->setValue($query->addField($argument->getValue()));
         }
         elseif ($type == Argument::IS_FUNCTION) {
             $field = $this->getQueryInfo($argument->getValue(), $query);
-            
+            $argument->setValue($field);
+            $level = max($level, $field->getAgregateLevel());
         }
-        else {
-            return;
-        }
-        $argument->setValue($field);
+        return $level;
     }
     private function getUseFunctionArgs(SQLFunction $function, Query $query) {
         foreach ($function->getArgs() as $arg) {
             $this->getUseArgumentArgs($arg, $query);
+        }
+    }
+    private function getUseFunctions(array $functions, Query $query) {
+        foreach ($functions as $function) {
+            $this->getUseFunctionArgs($function, $query);
         }
     }
     private function getUseArgs(\StdClass $structure, Query $query = null) {
@@ -279,9 +275,7 @@ final class SQL {
                 $this->getUseArgs($value, $query);
             }
         }
-        foreach ($structure->union as $function) {
-            $this->getUseFunctionArgs($function, $query);
-        }
+        $this->getUseFunctions($structure->union, $query);
         if (isset($structure->next)) {
             $this->getUseArgs($structure->next, $query);
         }
@@ -299,7 +293,19 @@ final class SQL {
         }
         return $structure;
     }
-    public function __invoke() {
+    private function cutTreeByFunctionName(\StdClass $structure, array $keys) {
+        
+        
+        foreach ($keys as $key) {
+            if (isset($structure->childs[$key])) {
+                foreach ($structure->childs[$key] as $value) {
+                    $this->{"{$key}StructureValidation"}($value, $structure);
+                    $this->getQueryTree($value, $keys);
+                }
+            }
+        }
+    }
+    public function __invoke($sql, \Closure $function) {
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->query = new Query();
@@ -307,8 +313,6 @@ final class SQL {
         $this->getQueryTree($structure, ['from', 'delete']);
         $structure = $this->tryMoveFirstChildQueryToRoot($structure);
         $this->getUseArgs($structure);
-    }
-    public function getFunctions() {
-        return $this->functions;
+        
     }
 }

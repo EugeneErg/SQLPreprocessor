@@ -4,9 +4,11 @@ final class SQLFunction {
 
 	private $name;
 	private $args;
+    private $is_aggregate;
 
 	function __construct($name, array $args = []) {
 		$this->name = mb_strtolower($name);
+        $this->is_aggregate = in_array($name, ['count', 'min', 'max', 'avg']);
 		$this->args = Argument::byArray($args);
 	}
 	function getName() {
@@ -28,4 +30,7 @@ final class SQLFunction {
 			'argCount' => count($this->args),
 		];
 	}
+    public function isAggregate() {
+        return $this->is_aggregate;
+    }
 }

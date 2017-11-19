@@ -52,8 +52,9 @@ final class Query {
         $this->limit = $limit;
         $this->offset = $offset;
         $this->distinct = $distinct;
-        $this->isSubQuery = is_scalar($var)
-            || is_null($var)
+        $this->isSubQuery
+            =  is_null($var)
+            || $var->getType() == Variable::IS_QUERY
             || $this->limit
             || $this->offset
             || $this->distinct
@@ -115,8 +116,8 @@ final class Query {
         if (is_null($branch)) {
             $branch = $this->branch;
         }
-        if (is_object($context)) {
-            $context = spl_object_hash($context);
+        if ($context instanceof Variable) {
+            $context = spl_object_hash($context->getTableVar());
         }
         if (!isset(self::$queries[$branch][$context])) {
             throw new \Exception('не существует запроса ' . $context);
@@ -141,24 +142,33 @@ final class Query {
             $this->fields['Variable ' . $object] = count($this->fields);
         }
     }*/
-    public function addNeed($object, $query, $functions = []) {
-        
-        //$field->context->isSubQuery()
-        //$outputQuery->isSubQuery(!empty($var->function[0]->is_aggregates));
+    public function addNeed(Field $field) {
+        $object = $field->getObject();
+        $context = $field->getContext();
+        if (is_scalar($object)) {
+            $hash = 'Scalar ' . $object;
+        }
+        elseif (is_object($object)) {
+            $hash = spl_object_hash($object);
+        }
+        else {
+            throw new \Exception('недопустимый тип объекта');
+        }
+        if (!isset($this->fields[$hash])) {
+            $this->fields[$hash] = (object) [
+                'object' => $object,
+                'index' => count($this->fields)
+            ];
+            if ($field->getAggregateLevel() != 0) {
+                $this->isSubQuery = true;
+            }
+        }
+        if (!isset($this->output[$context->context][$hash])) {
+            $this->output[$context->context][$hash] = 1;
+            $this->include[$hash] = $this;
+        }
     }
     public function addField($object = null, array $functions = []) {
-        if (!is_null($object)) {
-            if ($object instanceof Variable) {
-                $src = $this->find($object->getTableVar());
-            }
-            else {
-                $src = $object[0];
-                $object = $object[1];
-            }
-            $src->addNeed($object, $this, $functions);
-        }
-        $field = new Field($this, $object, $functions);
-        //$argument->setValue($field);
-        return $field;
+        return new Field($this, $object, $functions);
     }
 }

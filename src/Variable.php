@@ -4,6 +4,7 @@ final class Variable {
 	const IS_TABLE_CONTENT = 'content';
 	const IS_TABLE_NAME = 'name';
 	const IS_TABLE_FIELD = 'field';
+	const IS_QUERY = 'query';
 	private $type;
 	private $name;
 	private $field;
@@ -30,7 +31,7 @@ final class Variable {
 			$this->keys[$key] = $default;
 		}
 	}
-	public function __construct($nameOrValue, $keys = []) {
+	public function __construct($nameOrValue = null, $keys = []) {
 		if (isset($this->type)) {
 			throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
 		}
@@ -39,6 +40,9 @@ final class Variable {
 			$this->type = Self::IS_TABLE_CONTENT;
 			$this->values = $nameOrValue;
 		}
+        elseif (is_null($nameOrValue)) {
+            $this->type = Self::IS_QUERY;
+        }
 		else {
 			$this->type = Self::IS_TABLE_NAME;
 			$this->name = $nameOrValue;
