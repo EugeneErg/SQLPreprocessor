@@ -259,7 +259,7 @@ final class SQL {
             }
         }
     }
-    final private function getQueryInfo(Query $fQuery, Query $query) {
+    final private function getQueryInfo(Self $fQuery, Query $query) {
         /*
             $var->id->function() => SQL::from($var, $var->id)->function()
             $var('id')->function() => SQL::from($var, 'id')->function()
@@ -296,9 +296,9 @@ final class SQL {
                         break;
                     case Argument::IS_SCALAR:
                         $value = $context->getVariable($value);
-                        if (is_null($value->getAgregateLevel())) {
-                            $this->getUseFunctions($value->getObject(), $context);
-                            $value->setAgregateLevel();
+                        if (is_null($value->getAggregateLevel())) {
+                            $this->getUseChilds($value->getObject(), $context);
+                            $value->setAggregateLevel();
                         }
                         break;
                     case Argument::IS_VARIABLE:
@@ -330,7 +330,7 @@ final class SQL {
         elseif ($type == Argument::IS_FUNCTION) {
             $field = $this->getQueryInfo($argument->getValue(), $query);
             $argument->setValue($field);
-            $level = max($level, $field->getAgregateLevel());
+            $level = max($level, $field->getAggregateLevel());
         }
         return $level;
     }
@@ -344,6 +344,13 @@ final class SQL {
             $this->getUseFunctionArgs($function, $query);
         }
     }
+    private function getUseChilds(array $childs, Query $query) {
+        foreach ($childs as $key => $values) {
+            foreach ($values as $value) {
+                $this->getFields($value, $query);
+            }
+        }
+    }
     private function getFields(\StdClass $structure, Query $query = null) {
         if (isset($structure->query)) {
             $query = $structure->query;
@@ -351,11 +358,7 @@ final class SQL {
         else {
             $this->getUseFunctionArgs($structure->function, $query);
         }
-        foreach ($structure->childs as $key => $values) {
-            foreach ($values as $value) {
-                $this->getFields($value, $query);
-            }
-        }
+        $this->getUseChilds($structure->childs, $query);
         $this->getUseFunctions($structure->union, $query);
         if (isset($structure->next)) {
             $this->getFields($structure->next, $query);
@@ -406,7 +409,7 @@ final class SQL {
         $query = $structure->query;
         $query->addConditions($structure->childs);
         unset($structure);
-        dd($query);
+        //dd($query);
         $query->calculatePathsVariables();
     }
 }

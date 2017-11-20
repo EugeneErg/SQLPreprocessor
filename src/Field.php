@@ -6,6 +6,12 @@ final class Field {
     private $functions = [];
     private $aggregateLevel;
     
+    public function __debugInfo() {
+        return [
+            'context' => $this->context->getcontext(),
+            'object' => is_object($this->object) ? get_class($this->object) ? getType($this->object),
+        ];
+    }
     public function __construct(Query $context, $object = null, array $functions = []) {
         if ($object instanceof Variable) {
             $sContext = $context->find($object);
@@ -15,8 +21,8 @@ final class Field {
             if ($sContext === $context) {
                 $this->aggregateLevel = $object->aggregateLevel;
                 if (!count($functions) || !count($object->functions)) {
-                    $object = $object->object;
                     $functions = array_merge($object->functions, $functions);
+                    $object = $object->object;
                 }
             }
         }

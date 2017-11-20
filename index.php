@@ -58,7 +58,7 @@
                 })
             }
             ->select('name')->{
-                SQL()->return($var->name)
+                SQL()->return($var('test'))
             }
             ->select('description')->{
                 SQL()->
