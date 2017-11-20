@@ -99,7 +99,4 @@ final class Field {
     public function getContext() {
         return $this->context;
     }
-    public function editContext(Query $query) {
-        $this->context = $query;
-    }
 }

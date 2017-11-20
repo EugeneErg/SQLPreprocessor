@@ -32,7 +32,7 @@ class Structure {
     private static function array_union(array $a, array $b) {
         return array_merge(array_diff($a, $b), array_intersect($a, $b), array_diff($b, $a));
     }
-    public function addChild($key, Self $block, $levels = []) {
+    public function addChild($key, Self $block, $levels = [], $max = null, $min = null) {
         $key = (string) $key;
         if (isset($this->childs[$key]) && $this->childs[$key]->value !== $block) {
             throw new \Exception('Блок с данным ключем уже был выбран');
@@ -43,16 +43,25 @@ class Structure {
             $this->childs[$key] = (object) [
                 'levels' => $levels,
                 'value' => $block,
+                'max' => $max,
+                'min' => $min,
             ];
         }
         elseif (count($this->childs[$key]->levels)) {
             $this->childs[$key]->levels = Self::array_union($this->childs[$key]->levels, $levels);
+            if (!is_null($max)) {
+                $this->childs[$key]->max = $max;
+            }
+            if (!is_null($min)) {
+                $this->childs[$key]->min = $min;
+            }
         }
     }
     public function __debugInfo() {
         return [
             'union' => $this->union,
             'min_count' => $this->min_count,
+            'max_count' => $this->max_count,
             'levels' => $this->levels,
             'next' => $this->next,
             'childs' => $this->childs,
@@ -60,12 +69,13 @@ class Structure {
     }
     private function isValidChildLevels(array $childs, array $levels = null) {
         foreach ($this->childs as $key => $child) {
+            $min = isset($child->min) ? $child->min : $child->value->min_count;
             if ((is_null($levels)
                 || !count($child->levels)
                 || count(array_intersect($child->levels, $levels)))
-                    && $child->value->min_count > 0
+                    && $min > 0
                     && (!isset($childs[$key])
-                        || $child->value->min_count > count($childs[$key]))
+                        || $min > count($childs[$key]))
             ) {
                 if (is_null($levels)
                     || !count($child->levels)
@@ -121,11 +131,12 @@ class Structure {
             }
             if ($canBeChild && isset($this->childs[$name])) {
                 $child = $this->childs[$name];
-                if ($child->value->max_count > 0
+                $max = isset($child->max) ? $child->max : $child->value->max_count;
+                if ($max > 0
                     && isset($result->childs[$name])
-                        && ($count = count($result->childs[$name]) + 1) > $child->value->max_count
+                        && ($count = count($result->childs[$name]) + 1) > $max
                 ) {
-                    throw new \Exception("Для блока {$name} превышено допустимое максимальное количество использований: {$count} > {$child->value->max_count}");
+                    throw new \Exception("Для блока {$name} превышено допустимое максимальное количество использований: {$count} > {$max}");
                 }
                 if (!is_null($levels)
                     && !count($child->levels == [] ? $levels : $levels = array_intersect($levels, $child->levels))

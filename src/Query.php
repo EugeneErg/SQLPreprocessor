@@ -19,7 +19,7 @@ final class Query {
     private $branch;
     private $parent;
     private static $queries = [];
-    private $deleted = [];
+    private $isDeleted = false;
     private $childs = [];
     private $fields = [];
     private $variable = [];
@@ -34,6 +34,7 @@ final class Query {
     
     private function __clone() {}
     private function __wakeup() {}
+    private function __construct() {}
     
     public function getContext() {
         return $this->context;
@@ -44,7 +45,7 @@ final class Query {
     public function isMultiCorrelate() {
         return $this->isCorrelate() && $this->limit != 1;
     }
-    public function __construct(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
+    public static function create(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
         if (!is_null($var) && $var->getType() == Variable::IS_TABLE_FIELD) {
             throw new \Exception('Переменная содердит поле таблицы, а не саму таблицу');
         }
@@ -60,26 +61,33 @@ final class Query {
         if (!is_bool($distinct)) {
             throw new \Exception('Distinct должен быть true или false');
         }
-        $this->context = is_null($var) ? 'NULL' : spl_object_hash($var);
-        $this->branch = count(self::$queries);
-        self::$queries[$this->branch][$this->context] = $this;
-        $this->var = $var;
-        $this->join = $join;
-        $this->limit = $limit;
-        $this->offset = $offset;
-        $this->distinct = $distinct;
-        $this->isSubQuery
+        $query = new Self();
+        $query->context = is_null($var) ? 'NULL' : spl_object_hash($var);
+        $query->branch = count(self::$queries);
+        self::$queries[$query->branch][$query->context] = $query;
+        $query->var = $var;
+        $query->join = $join;
+        $query->limit = $limit;
+        $query->offset = $offset;
+        $query->distinct = $distinct;
+        $query->isSubQuery
             =  is_null($var)
             || $var->getType() == Variable::IS_QUERY
-            || $this->limit
-            || $this->offset
-            || $this->distinct
-            || $this->isCorrelate();
-        $this->index = 0;
-        $this->alias = 0;
+            || $query->limit
+            || $query->offset
+            || $query->distinct
+            || $query->isCorrelate();
+        $query->index = 0;
+        $query->alias = 0;
+        return $query;
+    }
+    public static function createDeleted(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
+        $result = Self::create($var, $join, $offset, $limit, $distinct);
+        $result->isDeleted = true;
+        return $result;
     }
     public function addChild(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
-        $query = new Self($var, $join, $offset, $limit, $distinct);
+        $query = Self::create($var, $join, $offset, $limit, $distinct);
         if (isset(self::$queries[$this->branch][$query->context])) {
             throw new \Exception("В данной ветке уже существует запрос с контекстом '{$query->context}'");
         }
@@ -95,42 +103,10 @@ final class Query {
     }
     public function addDeleted(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
         $query = $this->addChild($var, $join, $offset, $limit, $distinct);
+        $query->isDeleted = true;
         if ($query->isCorrelate()) {
             throw new \Exception('Невозможно удаление из коррелированного запроса');
         }
-        $this->deleted[$query->context] = $query;
-    }
-    final public function setOneChildAsRoot() {
-        if (!count($this->childs)) {
-            return $this;
-        }
-        $nextParent = null;
-        foreach ($this->childs as $child) {
-            if ($child->isCorrelate()) {
-                continue;
-            }
-            if (isset($nextParent)) {
-                return $this;
-            }
-            $nextParent = $child;
-        }
-        if (is_null($nextParent)) {
-            return $this;
-        }
-        foreach ($this->childs as $context => $child) {
-            if ($child != $nextParent) {
-                $child->parent = $nextParent;
-                $nextParent->childs[$context] = $child;
-            }
-        }
-        foreach ($this->variable as $name => $field) {
-            $field->editContext($nextParent);
-        }
-        $nextParent->deleted = $this->deleted;
-        //unset(self::$queries[$this->branch][$this->context]);нельзя удалять т.к. сбой индексов
-        $nextParent->parent = null;
-        $nextParent->isSubQuery = true;
-        return $nextParent;
     }
     public function find($context, $branch = null) {
         if (is_null($branch)) {
