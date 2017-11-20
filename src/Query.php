@@ -7,6 +7,7 @@ final class Query {
     //const JOIN_UNION = 'union';
     
     private $index;
+    private $level = 0;
     private $alias;
     private $context;
     private $var;
@@ -21,13 +22,23 @@ final class Query {
     private $deleted = [];
     private $childs = [];
     private $fields = [];
+    private $variable = [];
+    private $update = [];
+    private $insert = [];
+    private $orderby = [];
+    private $groupby = [];
+    private $select = [];
+    private $conditions;
     
     private function __clone() {}
     private function __wakeup() {}
     
-    final public function isCorrelate() {
+    public function isCorrelate() {
         return $this->join === Self::JOIN_CORRELATE;
     }
+	public function isMultiCorrelate() {
+		return $this->isCorrelate() && $this->limit != 1;
+	}
     public function __construct(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
         if (!is_null($var) && $var->getType() == Variable::IS_TABLE_FIELD) {
             throw new \Exception('Переменная содердит поле таблицы, а не саму таблицу');
@@ -73,6 +84,7 @@ final class Query {
         unset(self::$queries[$query->branch]);
         $query->branch = $this->branch;
         $query->parent = $this;
+        $query->level = $this->level + 1;
         $this->isSubQuery = true;
         return $this->childs[$query->context] = $query;
     }
@@ -178,11 +190,7 @@ final class Query {
         return $this->variable[$name] = $this->addField($childs);
     }
     public function addSelect(array $childs) {
-        $field = $this->addField($childs);
-        /*
-            необходимо также добавить в извлекаемые поля
-        */
-        return $field;
+        return $this->select[] = $this->addField($childs);
     }
     public function addOrderby(array $childs, $asc = true) {
         $this->orderby[] = (object) [
@@ -213,5 +221,130 @@ final class Query {
             'value' => $field = $this->addField($childs),
         ];
         return $field;
+    }
+    public function addConditions($childs) {
+        if (isset($this->condition)) {
+            throw new \Exception('Условия извлечения из таблицы можно указать лишь один раз');
+        }
+        return $this->condition = $this->addField($childs);
+    }
+    private function levelUp($count = 1) {
+        $query = $this;
+        foreach ($i = 0; $i < $count; $i++) {
+            $query = $query->parent;
+        }
+        return $query;
+    }
+	private function checkContext($dest, $isMultiCorrelate = false) {
+		if ($dest === $this) {
+			return null;
+		}
+		$destLevel = $dest->level;
+		$srcLevel = $src->level;
+		
+		if ($srcLevel <= $destLevel) {
+			if ($destLevel > $srcLevel) {
+				for (; $destLevel > $srcLevel + 1; $destLevel--) {
+					if(!$dest->isCorrelate()) {
+						throw new \Exception('использовать прородительские поля могут только коррелированные запросы');
+					}
+					$dest = $dest->levelUp();
+				}
+				$dest = $dest->levelUp();
+			}
+			if ($src == $dest) {
+				return null;//src является предком dest, данные не извлекаются
+			}
+			$dest = $dest->levelUp();//делаем уровень dest, выше, уровня src
+			$destLevel = $srcLevel - 1;
+		}
+		elseif ($isMultiCorrelate) {
+			$src = $src->levelUp($srcLevel - $destLevel - 1);//понижаем уровень src до уровня дочернего к dest
+			$srcLevel = $destLevel + 1;
+		}
+		else {//если запрос не является коррелированным мультизапросом, то извлечь необходимо в родительский запрос
+			return $src->levelUp();
+		}
+		//ищем общего предка для обоих запросов
+		while ($src->parent != $dest) {//уровень dest должен быть меньше уровня src
+			$src = $src->levelUp();
+			$srcLevel--;
+			$dest = $dest->levelUp();
+			$destLevel--;
+			if (!$dest->isCorrelate() && $src->parent != $dest) {
+				throw new \Exception('использовать прородительские поля могут только коррелированные запросы');
+			}
+		}
+		if ($isMultiCorrelate) {
+			return $dest;
+		}
+		return $src;//контекст, который будет отмечен для извлечения данных, будет ближайшим дочерним подзапросом, общего предка, по ветке SRC
+	}
+    private function getCorrelateStatuse(array $fields = []) {
+        if (!$this->isMultiCorrelate()) {
+            return [$fields];
+        }
+        /*
+            проверить,
+            1) является ли текущий запрос источником полей или клоном источника
+            2) или является родительским запросом для источника полей
+            если 2-е, то такие полябудут иметь индекс 0
+        */
+        if (count($this->groupby)) {
+            return [1 => $fields];
+        }
+        $result = [];
+		foreach ($fields as $hash => $field) {
+			if ($field->query != $this || $field->type == 'Field') {
+				$result[1][$hash] = $field;
+				continue;
+			}
+			//можем пробежать либо по дочерним фиелдам, либо по функциям
+			//задача: определить какие фиелды являются агрегатными или содержат в себе агрегаты
+			
+			if (!isset($field->isContainsAggregate)) {
+				$field->isContainsAggregate = $this->findAggregatesFunction($field->function);
+			}
+			$result[!$field->isContainsAggregate][$hash] = $field;
+		}
+		return $result;
+    }
+    public function calculatePathsVariables() {
+		foreach (array_reverse($this->childs) as $child) {
+			if ($child->isMultiCorrelate()) {
+				$child->calculatePathsVariables();
+			}
+		}
+		foreach ($this->childs as $child) {
+			if (!$child->isMultiCorrelate()) {
+				$child->calculatePathsVariables($child);
+			}
+		}
+        foreach ($this->output as $destContext => $fields) {
+			$dest = $this->find($destContext);
+			if ($dest == $this) {
+				throw new \Exception("{$destContext} == {$this->context}");
+			}
+			$nextQuery = [];
+            $newFields = $this->getCorrelateStatuse($fields);
+            foreach ($newFields as $isMultiCorrelate => $nFields) {
+                $nextQuery[$isMultiCorrelate] = $this->checkContext($dest, $isMultiCorrelate);
+            }
+			foreach ($nextQuery as $isMultiCorrelate => $nQuery) {
+				if ($isMultiCorrelate) {
+					$nQuery = $nQuery->addClone($this, 'correlate');
+					foreach ($newFields[$isMultiCorrelate] as $field) {
+						$dest->addNeed($field, $nQuery);
+					}
+					$nQuery = null;
+				}
+				elseif (in_array($nQuery, array($this, $dest))) {
+					$nQuery = null;
+				}
+				foreach ($newFields[$isMultiCorrelate] as $field) {
+					$dest->addNeed($field, $nQuery);
+				}
+			}
+		}
     }
 }

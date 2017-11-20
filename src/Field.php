@@ -89,6 +89,6 @@ final class Field {
         }
     }
     public function getContext() {
-        return $this->context();
+        return $this->context;
     }
 }
