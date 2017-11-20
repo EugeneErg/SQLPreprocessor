@@ -9,7 +9,9 @@ final class Field {
     public function __debugInfo() {
         return [
             'context' => $this->context->getcontext(),
-            'object' => is_object($this->object) ? get_class($this->object) ? getType($this->object),
+            'object' => is_object($this->object) ? get_class($this->object) : getType($this->object),
+            'functionCount' => count($this->functions),
+            'aggregateLevel' => $this->aggregateLevel,
         ];
     }
     public function __construct(Query $context, $object = null, array $functions = []) {
@@ -96,5 +98,8 @@ final class Field {
     }
     public function getContext() {
         return $this->context;
+    }
+    public function editContext(Query $query) {
+        $this->context = $query;
     }
 }

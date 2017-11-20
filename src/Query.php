@@ -101,7 +101,6 @@ final class Query {
         $this->deleted[$query->context] = $query;
     }
     final public function setOneChildAsRoot() {
-        dd($this);
         if (!count($this->childs)) {
             return $this;
         }
@@ -123,6 +122,9 @@ final class Query {
                 $child->parent = $nextParent;
                 $nextParent->childs[$context] = $child;
             }
+        }
+        foreach ($this->variable as $name => $field) {
+            $field->editContext($nextParent);
         }
         $nextParent->deleted = $this->deleted;
         //unset(self::$queries[$this->branch][$this->context]);нельзя удалять т.к. сбой индексов
