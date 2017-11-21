@@ -415,7 +415,6 @@ final class SQL {
         $this->getFields($structure, $query);
         $this->parseTreeFunctions($structure, ['orderby', 'groupby', 'insert', 'into', 'select', 'var', 'from', 'delete'], $query);
         unset($structure);
-        dd($query);
         $query->calculatePathsVariables();
     }
 }

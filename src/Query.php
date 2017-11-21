@@ -260,7 +260,7 @@ final class Query {
             return null;
         }
         $destLevel = $dest->level;
-        $srcLevel = $src->level;
+        $srcLevel = $this->level;
         
         if ($srcLevel <= $destLevel) {
             if ($destLevel > $srcLevel) {
@@ -272,7 +272,7 @@ final class Query {
                 }
                 $dest = $dest->levelUp();
             }
-            if ($src == $dest) {
+            if ($this == $dest) {
                 return null;//src является предком dest, данные не извлекаются
             }
             $dest = $dest->levelUp();//делаем уровень dest, выше, уровня src
@@ -340,10 +340,6 @@ final class Query {
                 $child->calculatePathsVariables($child);
             }
         }
-        if (count($this->output)) {
-            dd($this->output);
-        }
-        
         foreach ($this->output as $destContext => $fields) {
             $dest = $this->find($destContext);
             if ($dest == $this) {
