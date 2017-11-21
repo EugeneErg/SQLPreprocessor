@@ -6,10 +6,25 @@ final class Field {
     private $functions = [];
     private $aggregateLevel;
     
+    private function getObjectInfo() {
+        if ('object' === $type = getType($this->object)) {
+            if (!($this->object instanceof Variable)) {
+                return get_class($this->object);
+            }
+            if ($this->object->getType() === Variable::IS_TABLE_FIELD) {
+                return $this->object->getTableVar()->getValue() . '.' . $this->object->getValue();
+            }
+            return $this->object->getValue();
+        }
+        if (is_scalar($this->object)) {
+            return '"' . $this->object . '"';
+        }
+        return $type = getType($this->object);
+    }
     public function __debugInfo() {
         return [
-            'context' => $this->context->getcontext(),
-            'object' => is_object($this->object) ? get_class($this->object) : getType($this->object),
+            'query index' => $this->context->getIndex(),
+            'object' => $this->object,
             'functionCount' => count($this->functions),
             'aggregateLevel' => $this->aggregateLevel,
         ];

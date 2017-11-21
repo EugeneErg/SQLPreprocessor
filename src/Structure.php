@@ -204,8 +204,6 @@ class Structure {
                 throw new \Exception('Структура ни соответсвует ни нодному указанному шаблону');//не осталось подходяших уровней - структура невалидная
             }
             $results[$name][] = $child->value->inlineValidation($functions, $i);
-            if (isset($functions[$i + 1]) && is_array($functions[$i + 1])) {
-            }
         }
         $this->isValidChildLevels($results, $levels);
         return $results;

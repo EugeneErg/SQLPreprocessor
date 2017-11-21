@@ -7,7 +7,6 @@ final class Variable {
 	const IS_QUERY = 'query';
 	private $type;
 	private $name;
-	private $field;
 	private $parent;
 	private $fields = [];
 	private $keys = [];
@@ -15,6 +14,15 @@ final class Variable {
 	private function __clone() {}
 	private function __wakeup() {}
 	
+    public function __debugInfo() {
+        return [
+            'type' => $this->type,
+            'name' => $this->name,
+            'context' => spl_object_hash($this->getTableVar()),
+            'parent' => is_null($this->parent) ? 'NULL' : $this->parent->type . '(' . $this->parent->name . ')',
+            'fields' => $this->fields,
+        ];
+    }
 	private static function canBeString($value) {
 		return (string) $value;
 	}
@@ -59,8 +67,9 @@ final class Variable {
 	}
 	public function getValue() {
 		switch ($this->type) {
-			case Self::IS_TABLE_NAME: return $this->name;
-			case Self::IS_TABLE_FIELD: return $this->field;
+			case Self::IS_TABLE_NAME:
+			case Self::IS_TABLE_FIELD:
+                return $this->name;
 			case Self::IS_TABLE_CONTENT:
 				$result = [];
 				$keys = count($this->keys) ? $this->keys : array_keys($this->fields);
@@ -86,7 +95,7 @@ final class Variable {
 		}
 	}
 	public function __get($name) {
-		if ($this->type == Self::IS_TABLE_FIELD) {
+		if (in_array($this->type, [Self::IS_TABLE_FIELD, Self::IS_QUERY])) {
 			throw new \Exception('Table field can not have child fields');
 		}
 		if (!isset($this->fields[$name])) {
@@ -95,7 +104,7 @@ final class Variable {
 			}
 			$this->fields[$name] = clone $this;
 			$this->fields[$name]->type = Self::IS_TABLE_FIELD;
-			$this->fields[$name]->field = $name;
+			$this->fields[$name]->name = $name;
 			$this->fields[$name]->parent = $this;
 		}
 		return $this->fields[$name];

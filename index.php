@@ -34,7 +34,9 @@
     function select() {
         return call_user_func_array([SQL::class, 'select'], func_get_args());
     }
-    
+    function from() {
+        return call_user_func_array([SQL::class, 'from'], func_get_args());
+    }
     function SQLSwitch() {
         return call_user_func_array([SQL::class, 'switch'], func_get_args());
     }
@@ -46,33 +48,17 @@
         echo $text . '<br>';
     }
     
-    $query = sql()->from($var = new Variable('tabel_name', ['id', 'name', 'description']))
-            ->var('test')
-                ->return(12)
-            ->endvar
-        ->endfrom
+    $query =
+        from($var = new Variable('tabel_name'))->{
+            from($var2 = new Variable('tabel_name2'))->
+                return(123)->
+            endfrom->
+            if (12)->{
+                SQL()->return(121)
+            }
+        }
         ->select()->{
-            select('id')->{
-                SQL(function($sql) use($var) {
-                    return $var->id;
-                })
-            }
-            ->select('name')->{
-                SQL()->return($var('test'))
-            }
-            ->select('description')->{
-                SQL()->
-                switch($var->description)->{
-                    SQL()->case('')->
-                        return('description is not clear')->
-                    case(null)->{
-                        SQL()->return('description is not set')
-                    }->
-                    default->{
-                        SQL()->return($var->description)
-                    }
-                }
-            }
+            sql()->return($var2->id)
         };
     $query('mysql', function($query) {
         dd($query);

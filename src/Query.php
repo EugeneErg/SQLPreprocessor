@@ -36,8 +36,16 @@ final class Query {
     private function __wakeup() {}
     private function __construct() {}
     
-    public function getContext() {
-        return $this->context;
+    public function __debugInfo() {
+        return [
+            'index' => $this->index,
+            'childs' => $this->childs,
+            'include' => $this->include,
+            'output' => $this->output,
+        ];
+    }
+    public function getIndex() {
+        return $this->index;
     }
     public function isCorrelate() {
         return $this->join === Self::JOIN_CORRELATE;
@@ -141,7 +149,7 @@ final class Query {
     public function addNeed(Field $field, Query $query = null) {
         $object = $field->getObject();
         if (is_null($query)) {
-            $query = $this;
+            $query = $field->getContext();
         }
         if (is_scalar($object)) {
             $hash = 'SCALAR ' . $object;
@@ -332,6 +340,10 @@ final class Query {
                 $child->calculatePathsVariables($child);
             }
         }
+        if (count($this->output)) {
+            dd($this->output);
+        }
+        
         foreach ($this->output as $destContext => $fields) {
             $dest = $this->find($destContext);
             if ($dest == $this) {
