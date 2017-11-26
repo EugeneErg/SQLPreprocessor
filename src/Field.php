@@ -52,8 +52,8 @@ final class Field {
         }
         $this->object = $object;
         $this->functions = $functions;
-        if ($sContext !== $context) {
-            $sContext->addNeed($this);
+        if (!is_array($object) && !is_null($object)) {
+            $context->addNeed($this, $sContext);
         }
     }
     public function getObject() {
@@ -63,7 +63,7 @@ final class Field {
         return $this->functions;
     }
     public function getValue() {
-        if (!is_null($object)) {
+        if (!is_null($this->object)) {
             return $this->context->getFieldValue($this->object);
         }
     }

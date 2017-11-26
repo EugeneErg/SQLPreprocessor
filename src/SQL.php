@@ -399,7 +399,7 @@ final class SQL {
             }
         }
     }
-    public function __invoke(SQLTranslater $sqlClass, \Closure $function) {
+    public function __invoke(Translater $sqlClass, \Closure $function) {
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->union = [];
@@ -412,5 +412,9 @@ final class SQL {
         unset($structure);
         $query->calculatePathsVariables();
 
+        var_dump($query);
+        die();
+
+        //$sqlClass->translate($query);
     }
 }

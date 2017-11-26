@@ -41,11 +41,12 @@
     $query =
         from($var = new Variable('tabel_name'))->{
             from($var2 = new Variable('tabel_name2'))
-                ->return(123)
+                ->from($var3 = new Variable('tabel_name3'))
+                ->endfrom
             ->endfrom
         }
         ->select()->{
-            sql()->return($var2->id)
+            sql()->return($var2->id, $var3->id, $var->id)
         };
 
     $query(Translaters\MySql::instance(), function($query) {

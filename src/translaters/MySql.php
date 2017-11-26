@@ -1,11 +1,14 @@
 <?php namespace EugeneErg\SQLPreprocessor\Translaters;
 
-use EugeneErg\SQLPreprocessor\SQLTranslater;
+use EugeneErg\SQLPreprocessor\Translater;
 use EugeneErg\SQLPreprocessor\Query;
 use EugeneErg\SQLPreprocessor\Field;
 use EugeneErg\SQLPreprocessor\Variable;
 
-class MySql extends SQLTranslater {
+class MySql extends Translater {
+    const SELECT = 'select';
+    const PARENTFIELD = 'parentfield';
+
     protected $query;
 
     protected function quoteTable($name) {
@@ -19,6 +22,8 @@ class MySql extends SQLTranslater {
         switch ($var->getType()) {
             case Variable::IS_TABLE_NAME:
                 return $this->quoteTable($var->getValue());
+            case Variable::IS_SUBQUERY:
+                $var->getValue();
             case Variable::IS_TABLE_CONTENT:
                 if (!count($values = $var->getValue())) {
                     break;
@@ -61,6 +66,62 @@ class MySql extends SQLTranslater {
         }
         return $result;
     }
+    final private function getInclude($field) {
+        $include = $field->getValue();
+
+        if ($this->type == Self::PARENTFIELD
+            && !$this->query->select($include->field)
+        ) {
+            return $include->level == 0 ? '' : '`' . $include->query->index . '`.`' .$include->field . '`';
+        }
+        $alias = $this->type == self::SELECT && !$this->query->isCorrelate() ? ' `' . $include->field . '`' : '';
+
+        if (!isset($include->level)) {
+            throw new \Exception('Переменная ' . print_by_level($include->field, 2) . ' не содержит уровень принадлежности в запросе ' . $this->query->index);
+        }
+
+        if ($include->level == 0
+            || ($include->level == -1 && !$include->query->isSubQuery)
+        ) {
+            $prevType = $this->type;
+            if ($this->type == self::SELECT) {
+                $this->type = self::CONDITION;
+            }
+            if (!is_object($include->field)) {
+                print_r($include);
+                die();
+            }
+            switch ($include->field->type) {
+                case 'Field':
+                    $result = '`' . $include->query->index . '`.`' . $include->field->function . '`';
+                    break;
+                case 'Function':
+                    $result = $this->getFunction($include->field->function);
+                    break;
+                case 'Variable':
+                    $result = $this->getVariable($include->field->function);
+                    break;
+                default:
+                    print_r($include->field);
+                    die();
+            }
+            $this->type = $prevType;
+            return $result . $alias;
+        }
+        switch ($include->level) {
+            case 1://переменная родительского запроса, значит мы - коррелированный запрос
+                if ($include->query->isCorrelate()) {
+                    return $this->getQuery($include->query, $include->field) . $alias;
+                }
+                return $this->getParentInclude($include);
+            //return '`' . $include->query->index . '`.`' . $include->field . '`';
+            case -1://переменная дочернего запроса
+                if ($include->query->isCorrelate()) {
+                    return $this->getQuery($include->query, $include->field) . $alias;
+                }
+                return '`' . $include->query->index . '`.`' .$include->field . '`';
+        }
+    }
     protected function getQuery(Query $query, array $fields = null) {
         $parentQuery = $this->query;
         $parentType = $this->type;
@@ -68,7 +129,7 @@ class MySql extends SQLTranslater {
 
         if ($query->isSubQuery()) {
             if (count($select = $query->getSelect())) {
-                $this->type = self::SELECT;
+                $this->type = Self::SELECT;
 
                 if (!is_null($fields)) {
                     $select = $fields;
@@ -99,7 +160,7 @@ class MySql extends SQLTranslater {
                 ]);
             }
             elseif (count($update = $query->getUpdate())) {
-                $this->type = self::CONDITION;
+                $this->type = Self::CONDITION;
                 $updates = [];
                 foreach ($update as  $hash => $update) {
                     $updates[$hash] = $this->getInclude($update->key) . '=' . $this->getInclude($update->value);

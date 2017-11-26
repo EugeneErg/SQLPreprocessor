@@ -1,6 +1,6 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
-abstract class SQLTranslater {
+abstract class Translater {
 
     protected $vars = [];
     private $path;

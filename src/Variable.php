@@ -4,13 +4,15 @@ final class Variable {
 	const IS_TABLE_CONTENT = 'content';
 	const IS_TABLE_NAME = 'name';
 	const IS_TABLE_FIELD = 'field';
-	const IS_QUERY = 'query';
+    const IS_QUERY = 'query';
+    const IS_SUBQUERY = 'subquery';
 	private $type;
 	private $name;
 	private $parent;
 	private $fields = [];
 	private $keys = [];
-	private $values = [];	
+	private $values = [];
+	private $query;
 	private function __clone() {}
 	private function __wakeup() {}
 	
@@ -43,15 +45,15 @@ final class Variable {
 		}
 	}
 	public function __construct($nameOrValue = null, $keys = []) {
-	    /*
-	     * В будущем также добавить возможность указывать запрос в качестве входного параметра для переменной
-	     * запрос будет отдельно анализироваться, и вставляться в текущий запрос, с учетом альясов для ожидаемых ключей
-	     * */
 		if (isset($this->type)) {
 			throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
 		}
 		$this->setKeys((array) $keys);
-		if (is_array($nameOrValue)) {
+		if ($nameOrValue instanceof SQL) {
+            $this->type = Self::IS_SUBQUERY;
+            $this->query = $nameOrValue;
+        }
+		elseif (is_array($nameOrValue)) {
 		    if (!count($keys)) {
                 $this->setKeysFromValue($nameOrValue);
             }
@@ -80,6 +82,8 @@ final class Variable {
 			case Self::IS_TABLE_NAME:
 			case Self::IS_TABLE_FIELD:
                 return $this->name;
+            case Self::IS_SUBQUERY:
+                return $this->query;
 			case Self::IS_TABLE_CONTENT:
 				$result = [];
 				$keys = count($this->keys) ? $this->keys : array_keys($this->fields);

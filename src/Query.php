@@ -14,7 +14,7 @@ final class Query {
     private $join;
     private $limit;
     private $offset;
-    private $distinct;
+    private $isDistinct;
     private $isSubQuery;
     private $branch;
     private $parent;
@@ -52,7 +52,7 @@ final class Query {
     public function isMultiCorrelate() {
         return $this->isCorrelate() && $this->limit != 1;
     }
-    public static function create(Variable $var, $join = null, $offset = 0, $limit = null, $distinct = false) {
+    public static function create(Variable $var, $join = null, $offset = 0, $limit = null, $isDistinct = false) {
         if ($var->getType() == Variable::IS_TABLE_FIELD) {
             throw new \Exception('Переменная содердит поле таблицы, а не саму таблицу');
         }
@@ -65,7 +65,7 @@ final class Query {
         if ((!is_null($limit) && !is_numeric($limit)) || $limit < 0) {
             throw new \Exception('Limit должен быть целым неотрицательным числом или NULL');
         }
-        if (!is_bool($distinct)) {
+        if (!is_bool($isDistinct)) {
             throw new \Exception('Distinct должен быть true или false');
         }
         $query = new Self();
@@ -76,12 +76,12 @@ final class Query {
         $query->join = $join;
         $query->limit = $limit;
         $query->offset = $offset;
-        $query->distinct = $distinct;
+        $query->isDistinct = $isDistinct;
         $query->isSubQuery
             =  $var->getType() == Variable::IS_QUERY
             || $query->limit
             || $query->offset
-            || $query->distinct
+            || $query->isDistinct
             || $query->isCorrelate();
         $query->index = 0;
         $query->alias = 0;
@@ -94,13 +94,13 @@ final class Query {
     }
     public function addChild(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
         $query = Self::create($var, $join, $offset, $limit, $distinct);
-        if (isset(self::$queries[$this->branch][$query->context])) {
+        if (isset(Self::$queries[$this->branch][$query->context])) {
             throw new \Exception("В данной ветке уже существует запрос с контекстом '{$query->context}'");
         }
-        $query->index = count(self::$queries[$this->branch]);
+        $query->index = count(Self::$queries[$this->branch]);
         $query->alias = $query->index;
-        self::$queries[$this->branch][$query->context] = $query;
-        unset(self::$queries[$query->branch]);
+        Self::$queries[$this->branch][$query->context] = $query;
+        unset(Self::$queries[$query->branch]);
         $query->branch = $this->branch;
         $query->parent = $this;
         $query->level = $this->level + 1;
@@ -145,9 +145,9 @@ final class Query {
         }
     }*/
     public function addNeed(Field $field, Query $query = null) {
-        $object = $field->getObject();
+        $object = $field->getObject();//что нужно
         if (is_null($query)) {
-            $query = $field->getContext();
+            $query = $this;
         }
         if (is_scalar($object)) {
             $hash = 'SCALAR ' . $object;
@@ -156,7 +156,7 @@ final class Query {
             $hash = spl_object_hash($object);
         }
         else {
-            throw new \Exception('недопустимый тип объекта');
+            throw new \Exception('недопустимый тип объекта ' . getType($object));
         }
         if (!isset($this->include[$hash])) {
             $this->include[$hash] = (object) [
@@ -263,11 +263,11 @@ final class Query {
         return $query;
     }
     private function checkContext($dest, $isMultiCorrelate = false) {
-        if ($dest === $this) {
+        if ($dest === $src = $this) {
             return null;
         }
         $destLevel = $dest->level;
-        $srcLevel = $this->level;
+        $srcLevel = $src->level;
         
         if ($srcLevel <= $destLevel) {
             if ($destLevel > $srcLevel) {
@@ -279,7 +279,7 @@ final class Query {
                 }
                 $dest = $dest->levelUp();
             }
-            if ($this == $dest) {
+            if ($src == $dest) {
                 return null;//src является предком dest, данные не извлекаются
             }
             $dest = $dest->levelUp();//делаем уровень dest, выше, уровня src
