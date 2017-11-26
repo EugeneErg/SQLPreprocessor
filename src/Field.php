@@ -23,7 +23,7 @@ final class Field {
     }
     public function __debugInfo() {
         return [
-            'query index' => $this->context->getIndex(),
+            'query index' => $this->context ? $this->context->getIndex() : null,
             'object' => $this->object,
             'functionCount' => count($this->functions),
             'aggregateLevel' => $this->aggregateLevel,

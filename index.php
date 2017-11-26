@@ -1,20 +1,11 @@
 <?php
     error_reporting(E_ALL);
-    include_once 'src/Argument.php';
-    include_once 'src/Variable.php';
-    include_once 'src/SQLFunction.php';
-    include_once 'src/Structure.php';
-    include_once 'src/SQL.php';
-    include_once 'src/Query.php';
-    include_once 'src/Field.php';
-    
-    use EugeneErg\SQLPreprocessor\Argument;
+    $loader = require( __DIR__ . '/vendor/autoload.php' );
+    $loader->addPsr4( 'EugeneErg\\SQLPreprocessor\\', __DIR__ . '/src/' );
+
     use EugeneErg\SQLPreprocessor\Variable;
-    use EugeneErg\SQLPreprocessor\SQLFunction;
-    use EugeneErg\SQLPreprocessor\Structure;
+    use EugeneErg\SQLPreprocessor\Translaters;
     use EugeneErg\SQLPreprocessor\SQL;
-    use EugeneErg\SQLPreprocessor\Query;
-    use EugeneErg\SQLPreprocessor\Field;
     
     function dd() {
         $res = '<? ';
@@ -26,7 +17,6 @@
         die(highlight_string($res, true));
     }
 
-    
     function sql() {
         return call_user_func_array([SQL::class, 'create'], func_get_args());
     }
@@ -50,16 +40,14 @@
     
     $query =
         from($var = new Variable('tabel_name'))->{
-            from($var2 = new Variable('tabel_name2'))->
-                return(123)->
-            endfrom->
-            if (12)->{
-                SQL()->return(121)
-            }
+            from($var2 = new Variable('tabel_name2'))
+                ->return(123)
+            ->endfrom
         }
         ->select()->{
             sql()->return($var2->id)
         };
-    $query('mysql', function($query) {
+
+    $query(Translaters\MySql::instance(), function($query) {
         dd($query);
     });

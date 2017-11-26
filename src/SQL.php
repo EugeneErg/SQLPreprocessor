@@ -210,18 +210,19 @@ final class SQL {
     }
     private function orderbyStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
         $args = $value->function->getArgs();
-        $query->addOrderby($value->childs, !count($args) || !empty($args[0]->getValue()));
+        $query->addOrder($value->childs, !count($args) || !empty($args[0]->getValue()));
         if (isset($value->next)) {
             $this->orderbyStructureParentValidation($value->next, $structure, $query);
         }
     }
     private function groupbyStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $query->addGroupby($value->childs);
+        $query->addGroup($value->childs);
         if (isset($value->next)) {
             $this->groupbyStructureParentValidation($value->next, $structure, $query);
         }
     }
     private function updateStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
+        $args = $value->function->getArgs();
         if (!count($args)) {
             throw new \Exception('неправильный тип аргумента');
         }
@@ -232,17 +233,11 @@ final class SQL {
     }
     private function intoStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
         $args = $value->function->getArgs();
-        if (!count($args) || $args[0]->getType() != 'scalar') {
-            throw new \Exception('неправильный тип аргумента');
-        }
-        $value->insertTable = $args[0]->getValue();
+        $query->addIntoTable($args[0]->getValue());
     }
     private function insertStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
         $args = $value->function->getArgs();
-        if (!count($args) || $args[0]->getType() != 'scalar') {
-            throw new \Exception('неправильный тип аргумента');
-        }
-        $query->addInsert($value->childs, $structure->insertTable, $args[0]->getValue());
+        $query->addInsert($value->childs, $args[0]->getValue());
         if (isset($value->next)) {
             $this->insertStructureParentValidation($value->next, $structure, $query);
         }
@@ -404,7 +399,7 @@ final class SQL {
             }
         }
     }
-    public function __invoke($sql, \Closure $function) {
+    public function __invoke(SQLTranslater $sqlClass, \Closure $function) {
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->union = [];
@@ -416,5 +411,6 @@ final class SQL {
         $this->parseTreeFunctions($structure, ['orderby', 'groupby', 'insert', 'into', 'select', 'var', 'from', 'delete'], $query);
         unset($structure);
         $query->calculatePathsVariables();
+
     }
 }

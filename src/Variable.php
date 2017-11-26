@@ -26,6 +26,9 @@ final class Variable {
 	private static function canBeString($value) {
 		return (string) $value;
 	}
+	private function setKeysFromValue($values) {
+        $this->keys = array_keys(call_user_func('array_replace', $values));
+    }
 	private function setKeys(array $keys) {
 		$this->keys = [];
 		foreach ($keys as $key => $default) {
@@ -40,11 +43,18 @@ final class Variable {
 		}
 	}
 	public function __construct($nameOrValue = null, $keys = []) {
+	    /*
+	     * В будущем также добавить возможность указывать запрос в качестве входного параметра для переменной
+	     * запрос будет отдельно анализироваться, и вставляться в текущий запрос, с учетом альясов для ожидаемых ключей
+	     * */
 		if (isset($this->type)) {
 			throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
 		}
 		$this->setKeys((array) $keys);
 		if (is_array($nameOrValue)) {
+		    if (!count($keys)) {
+                $this->setKeysFromValue($nameOrValue);
+            }
 			$this->type = Self::IS_TABLE_CONTENT;
 			$this->values = $nameOrValue;
 		}
@@ -77,10 +87,13 @@ final class Variable {
 					$values = (array) $values;
 					$num = 0;
 					foreach ($keys as $key => $default) {
-						if (isset($values[$num])) {
+					    if (!isset($this->fields[$key])) {
+					        continue;
+                        }
+						if (array_key_exists($num, $values)) {
 							$value = $values[$num];
 						}
-						elseif (isset($values[$key])) {
+						elseif (array_key_exists($key, $values)) {
 							$value = $values[$key];
 						}
 						else {

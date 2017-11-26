@@ -25,12 +25,13 @@ final class Query {
     private $variable = [];
     private $update = [];
     private $insert = [];
-    private $orderby = [];
-    private $groupby = [];
+    private $orders = [];
+    private $groups = [];
     private $select = [];
     private $output = [];
     private $include = [];
     private $conditions;
+    private $intoTable;
     
     private function __clone() {}
     private function __wakeup() {}
@@ -42,10 +43,8 @@ final class Query {
             'childs' => $this->childs,
             'include' => $this->include,
             'output' => $this->output,
+            'select' => $this->select,
         ];
-    }
-    public function getIndex() {
-        return $this->index;
     }
     public function isCorrelate() {
         return $this->join === Self::JOIN_CORRELATE;
@@ -53,8 +52,8 @@ final class Query {
     public function isMultiCorrelate() {
         return $this->isCorrelate() && $this->limit != 1;
     }
-    public static function create(Variable $var = null, $join = null, $offset = 0, $limit = null, $distinct = false) {
-        if (!is_null($var) && $var->getType() == Variable::IS_TABLE_FIELD) {
+    public static function create(Variable $var, $join = null, $offset = 0, $limit = null, $distinct = false) {
+        if ($var->getType() == Variable::IS_TABLE_FIELD) {
             throw new \Exception('Переменная содердит поле таблицы, а не саму таблицу');
         }
         if (!in_array($join, [null, Self::JOIN_LEFT, Self::JOIN_RIGHT, Self::JOIN_CORRELATE])) {
@@ -70,7 +69,7 @@ final class Query {
             throw new \Exception('Distinct должен быть true или false');
         }
         $query = new Self();
-        $query->context = is_null($var) ? 'NULL' : spl_object_hash($var);
+        $query->context = spl_object_hash($var);
         $query->branch = count(self::$queries);
         self::$queries[$query->branch][$query->context] = $query;
         $query->var = $var;
@@ -79,8 +78,7 @@ final class Query {
         $query->offset = $offset;
         $query->distinct = $distinct;
         $query->isSubQuery
-            =  is_null($var)
-            || $var->getType() == Variable::IS_QUERY
+            =  $var->getType() == Variable::IS_QUERY
             || $query->limit
             || $query->offset
             || $query->distinct
@@ -175,7 +173,7 @@ final class Query {
                 }
             }
         }
-        if ($query == $this) {
+        if ($query === $this) {
             if (isset($this->include[$hash]->query)) {
                 $query = $this->include[$hash]->query;
             }
@@ -212,21 +210,30 @@ final class Query {
     public function addSelect(array $childs) {
         return $this->select[] = $this->addField($childs);
     }
-    public function addOrderby(array $childs, $asc = true) {
-        $this->orderby[] = (object) [
+    public function addOrder(array $childs, $asc = true) {
+        $this->orders[] = (object) [
             'field' => $field = $this->addField($childs),
             'asc' => $asc,
         ];
         return $field;
     }
-    public function addGroupby(array $childs, $asc = true) {
-        return $this->orderby[] = $this->addField($childs);
+    public function addGroup(array $childs, $asc = true) {
+        return $this->orders[] = $this->addField($childs);
     }
-    public function addInsert(array $childs, $table_name, $field_name) {
-        if (isset($this->insert[$table_name][$field_name])) {
+    public function addIntoTable($table_name) {
+        if (!is_scalar($table_name)) {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        return $this->intoTable = $table_name;
+    }
+    public function addInsert(array $childs, $field_name) {
+        if (!is_scalar($field_name)) {
+            throw new \Exception('неправильный тип аргумента');
+        }
+        if (isset($this->insert[$field_name])) {
             throw new \Exception('нельзя установить два значения для одного поля');
         }
-        return $this->insert[$table_name][$field_name] = $this->addField($childs);
+        return $this->insert[$field_name] = $this->addField($childs);
     }
     public function addUpdate(array $childs, Variable $variable) {
         if ($variable->getType() != Variable::IS_TABLE_FIELD) {
@@ -364,6 +371,18 @@ final class Query {
                 foreach ($newFields[$isMultiCorrelate] as $field) {
                     $dest->addNeed($field, $nQuery);
                 }
+            }
+        }
+    }
+    public function __call($name, $args) {
+        if (!count($args)) {
+            switch (true) {
+                case mb_strpos($name, 'get') === 0:
+                    $name = lcfirst(mb_substr($name, 3));
+                case mb_strpos($name, 'is') === 0:
+                    if (isset($this->$name)) {
+                        return $this->$name;
+                    }
             }
         }
     }
