@@ -25,7 +25,7 @@ final class Field {
                     $object = $object->object;
                 }
             }
-            elseif (!count($object->functions) && $notFunctionCount) {
+            elseif (!count($object->functions) && $notFunctionCount && (is_object($object->object))) {
                 $object = $object->object;
             }
             else {

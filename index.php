@@ -20,7 +20,6 @@
     function sql() {
         return call_user_func_array([SQL::class, 'create'], func_get_args());
     }
-    
     function select() {
         return call_user_func_array([SQL::class, 'select'], func_get_args());
     }
@@ -30,7 +29,6 @@
     function SQLSwitch() {
         return call_user_func_array([SQL::class, 'switch'], func_get_args());
     }
-    
     function SQLReturn() {
         return call_user_func_array([SQL::class, 'return'], func_get_args());
     }
@@ -42,11 +40,14 @@
         from($var = new Variable('tabel_name'))->{
             from($var2 = new Variable('tabel_name2'))
                 ->from($var3 = new Variable('tabel_name3'))
+                    ->var('test')
+                        ->return(12)
+                    ->endvar
                 ->endfrom
             ->endfrom
         }
         ->select()->{
-            sql()->return($var2->id, $var3->id, $var->id)
+            sql()->return($var3('test'))
         };
 
     $query(Translaters\MySql::instance(), function($query) {

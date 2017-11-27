@@ -311,6 +311,7 @@ final class SQL {
                         if ($vContext !== $context) {
                             $value = $context->addField($value);
                         }
+                        break;
                     default:
                         throw new \Exception('Неправильный тип аргумента');
                 }
