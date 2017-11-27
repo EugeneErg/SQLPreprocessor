@@ -5,22 +5,7 @@ final class Field {
     private $object;
     private $functions = [];
     private $aggregateLevel;
-    
-    private function getObjectInfo() {
-        if ('object' === $type = getType($this->object)) {
-            if (!($this->object instanceof Variable)) {
-                return get_class($this->object);
-            }
-            if ($this->object->getType() === Variable::IS_TABLE_FIELD) {
-                return $this->object->getTableVar()->getValue() . '.' . $this->object->getValue();
-            }
-            return $this->object->getValue();
-        }
-        if (is_scalar($this->object)) {
-            return '"' . $this->object . '"';
-        }
-        return $type = getType($this->object);
-    }
+
     public function __debugInfo() {
         return [
             'query index' => $this->context ? $this->context->getIndex() : null,
@@ -30,30 +15,38 @@ final class Field {
         ];
     }
     public function __construct(Query $context, $object = null, array $functions = []) {
-        if ($object instanceof Variable) {
-            $sContext = $context->find($object);
-        }
-        elseif ($object instanceof Self) {
-            $sContext = $object->getContext();
-            if ($sContext === $context) {
+        $notFunctionCount = !count($functions);
+        while ($object instanceof Self) {
+            $oContext = $object->getContext();
+            if ($oContext === $context) {
                 $this->aggregateLevel = $object->aggregateLevel;
-                if (!count($functions) || !count($object->functions)) {
+                if ($notFunctionCount || !count($object->functions)) {
                     $functions = array_merge($object->functions, $functions);
                     $object = $object->object;
                 }
             }
+            elseif (!count($object->functions) && $notFunctionCount) {
+                $object = $object->object;
+            }
+            else {
+                break;
+            }
         }
-        else {
-            $sContext = $context;
+        if ($object instanceof Variable) {
+            $oContext = $context->find($object);
         }
-        $this->context = $context;
+        elseif (!($object instanceof Self)) {
+            $oContext = $context;
+        }
+        $this->context = $notFunctionCount ? $oContext : $context;
+
         foreach ($functions as $function) {
             $this->aggregateLevel += $this->getFunctionAggregateLevel($function);
         }
         $this->object = $object;
         $this->functions = $functions;
         if (!is_array($object) && !is_null($object)) {
-            $context->addNeed($this, $sContext);
+            $context->addNeed($this, $oContext);
         }
     }
     public function getObject() {

@@ -399,7 +399,8 @@ final class SQL {
             }
         }
     }
-    public function __invoke(Translater $sqlClass, \Closure $function) {
+    public function __invoke(Translater $sqlClass, \Closure $function = null) {
+        //если функци не передона, возвращаем текст запроса
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->union = [];

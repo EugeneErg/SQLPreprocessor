@@ -178,7 +178,7 @@ final class Query {
                 $query = $this->include[$hash]->query;
             }
             if (!isset($this->include[$hash]->level)) {
-                $this->include[$hash]->level = ($query != $this) * (1 - 2 * isset($this->childs[$query->context]));//0 1 -1
+                $this->include[$hash]->level = ($query !== $this) * (1 - 2 * isset($this->childs[$query->context]));//0 1 -1
             }
         }
         else {
@@ -193,7 +193,7 @@ final class Query {
                 $query->include[$hash]->query = $prevQuery;
             }
             if (!isset($query->include[$hash]->level)) {
-                $query->include[$hash]->level = ($query != $prevQuery) * (1 - 2 * ($prevQuery->parent == $query));
+                $query->include[$hash]->level = ($query !== $prevQuery) * (1 - 2 * ($prevQuery->parent === $query));
             }
         }
         $this->include[$hash]->query = $query;

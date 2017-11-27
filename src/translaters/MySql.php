@@ -23,7 +23,8 @@ class MySql extends Translater {
             case Variable::IS_TABLE_NAME:
                 return $this->quoteTable($var->getValue());
             case Variable::IS_SUBQUERY:
-                $var->getValue();
+                $sql = $var->getValue();
+                return $sql(new $this());
             case Variable::IS_TABLE_CONTENT:
                 if (!count($values = $var->getValue())) {
                     break;
