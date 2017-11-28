@@ -30,7 +30,7 @@ final class Query {
     private $select = [];
     private $output = [];
     private $include = [];
-    private $conditions;
+    private $condition;
     private $intoTable;
 
     private function __wakeup() {}
@@ -375,6 +375,7 @@ final class Query {
                 $child->calculatePathsVariables($child);
             }
         }
+        $multiCorrelate = [];
         foreach ($this->output as $destContext => $fields) {
             $dest = $this->find($destContext);
             if ($dest == $this) {
@@ -387,17 +388,24 @@ final class Query {
             }
             foreach ($nextQuery as $isMultiCorrelate => $nQuery) {
                 if ($isMultiCorrelate) {
-                    $nQuery = $nQuery->addClone($this, 'correlate');
-                    foreach ($newFields[$isMultiCorrelate] as $field) {
-                        $dest->addNeed($field, $nQuery);
-                    }
-                    $nQuery = null;
+                    $multiCorrelate[$nQuery->context][$destContext] = $newFields[$isMultiCorrelate];
+                    continue;
                 }
-                elseif (in_array($nQuery, array($this, $dest))) {
+                if (in_array($nQuery, [$this, $dest], true)) {
                     $nQuery = null;
                 }
                 foreach ($newFields[$isMultiCorrelate] as $field) {
                     $dest->addNeed($field, $nQuery);
+                }
+            }
+        }
+        foreach ($multiCorrelate as $intoContext => $needs) {
+            $nQuery = $this->find($intoContext)->addClone($this);
+            foreach ($needs as $needContext => $fields) {
+                $need = $this->find($needContext);
+                foreach ($fields as $field) {
+                    $need->addNeed($field, $nQuery);
+                    $need->addNeed($field);
                 }
             }
         }

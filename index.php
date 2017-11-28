@@ -39,11 +39,12 @@
     
     $query =
         from($var1 = new Variable('tabel_name1'))->{
-            from($var2 = new Variable('tabel_name2'))
-                ->from($var3 = new Variable('tabel_name3'), Query::JOIN_CORRELATE)
-                    ->from($var4 = new Variable('tabel_name4'))
-                    ->endfrom
+            from($var3 = new Variable('tabel_name3'), Query::JOIN_CORRELATE)
+                ->from($var4 = new Variable('tabel_name4'))
                 ->endfrom
+            ->endfrom
+            ->from($var2 = new Variable('tabel_name2'))
+                ->return($var4->test)
             ->endfrom
         }
         ->select()->{
