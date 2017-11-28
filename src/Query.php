@@ -32,12 +32,11 @@ final class Query {
     private $include = [];
     private $conditions;
     private $intoTable;
-    
-    private function __clone() {}
+
     private function __wakeup() {}
     private function __construct() {}
     
-    public function __debugInfo() {
+    /*public function __debugInfo() {
         return [
             'index' => $this->index,
             'childs' => $this->childs,
@@ -45,7 +44,7 @@ final class Query {
             'output' => $this->output,
             'select' => $this->select,
         ];
-    }
+    }*/
     public function isCorrelate() {
         return $this->join === Self::JOIN_CORRELATE;
     }
@@ -316,9 +315,54 @@ final class Query {
         }
         $result = [];
         foreach ($fields as $hash => $field) {
-            $result[!!$field->getAggregateLevel()][$hash] = $field;
+            $result[$field->getContext() !== $this || !!$field->getAggregateLevel()][$hash] = $field;
         }
         return $result;
+    }
+    private function __clone() {
+        $this->childs = [];
+        $this->include = [];
+    }
+    final public function addClone(Query $srcQuery) {
+        $query = clone $srcQuery;
+        $query->alias = $query->index = count(Self::$queries[$this->branch]);
+        $query->context = 'clone #' . $query->index;
+        Self::$queries[$this->branch][$query->context] = $query;
+        $query->branch = $this->branch;
+        $query->parent = $this;
+        $this->isSubQuery = true;
+        $childs = [];
+        foreach ($srcQuery->childs as $child) {
+            $childs[$child->context] = $query->addClone($child);
+        }
+        foreach ($srcQuery->include as $context => $include) {
+            if (!isset($include->level)) {
+                $query->addNeed($include->field, $include->query);
+            }
+            else {
+                switch ($include->level) {
+                    case 0:
+                        $includeQuery = $query;
+                        break;
+                    case 1:
+                        if ($this->isCorrelate()) {
+                            $includeQuery = $include->query;
+                        }
+                        else {
+                            $includeQuery = $this;
+                        }
+                        break;
+                    case -1:
+                        $includeQuery = $childs[$include->query->context];
+                }
+                $query->include[$context] = (object) array (
+                    'field' => $include->field,
+                    'query' => $includeQuery,
+                    'level' => $include->level
+                );
+            }
+        }
+        return $this->childs[$query->context] = $query;
     }
     public function calculatePathsVariables() {
         foreach (array_reverse($this->childs) as $child) {

@@ -24,12 +24,12 @@ final class SQLFunction {
         }
         return $result;
     }
-    public function __debugInfo() {
+    /*public function __debugInfo() {
         return [
             'name' => $this->name,
             'argCount' => count($this->args),
         ];
-    }
+    }*/
     public function isAggregate() {
         return $this->is_aggregate;
     }

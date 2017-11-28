@@ -11,34 +11,23 @@ final class Field {
     private $aggregateLevel;
     private $type;
 
-    public function __debugInfo() {
+/*    public function __debugInfo() {
         return [
             'query index' => $this->context ? $this->context->getIndex() : null,
             'object' => $this->object,
             'functionCount' => count($this->functions),
             'aggregateLevel' => $this->aggregateLevel,
         ];
-    }
+    }*/
     public function __construct(Query $context, $object = null, array $functions = []) {
-        $notFunctionCount = !count($functions);
-        while ($object instanceof Self) {
+        if ($object instanceof Self) {
             $oContext = $object->getContext();
             $this->type = Self::TYPE_FIELD;
-            if ($oContext === $context) {
+            if ($oContext === $context || !count($functions)) {
                 $this->aggregateLevel = $object->aggregateLevel;
-                if ($notFunctionCount || !count($object->functions)) {
-                    $functions = array_merge($object->functions, $functions);
-                    $object = $object->object;
-                }
-            }
-            elseif (!count($object->functions) && $notFunctionCount && (is_object($object->object))) {
-                $object = $object->object;
-            }
-            else {
-                break;
             }
         }
-        if ($object instanceof Variable) {
+        elseif ($object instanceof Variable) {
             $oContext = $context->find($object);
             $this->type = Self::TYPE_VARIABLE;
         }
@@ -46,14 +35,14 @@ final class Field {
             $oContext = $context;
             $this->type = Self::TYPE_BLOCK;
         }
-        elseif (!$object instanceof Self) {
+        else {
             $oContext = $context;
             $this->type = Self::TYPE_NULL;
         }
         if (!isset($this->aggregateLevel)) {
             $this->aggregateLevel = 0;
         }
-        $this->context = $notFunctionCount ? $oContext : $context;
+        $this->context = count($functions) ? $context : $oContext;
 
         foreach ($functions as $function) {
             $this->aggregateLevel += $this->getFunctionAggregateLevel($function);

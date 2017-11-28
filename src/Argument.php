@@ -48,6 +48,7 @@ final class Argument {
     }
     public function setValue($arg) {
         $this->value = $arg;
+        $this->type = null;
         if (Self::IS_ARRAY == $this->type = $this->getType()) {
             $this->value = Self::byArray($arg);
         }

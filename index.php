@@ -38,14 +38,16 @@
     }
     
     $query =
-        from($var = new Variable('tabel_name'))->{
+        from($var1 = new Variable('tabel_name1'))->{
             from($var2 = new Variable('tabel_name2'))
-                ->from($var3 = new Variable('tabel_name3'))
+                ->from($var3 = new Variable('tabel_name3'), Query::JOIN_CORRELATE)
+                    ->from($var4 = new Variable('tabel_name4'))
+                    ->endfrom
                 ->endfrom
             ->endfrom
         }
         ->select()->{
-            sql()->return($var3->id->count())
+            sql()->return($var4->id->count(), $var4->id)
         };
 
     $query(Translaters\MySql::instance(), function($query) {
