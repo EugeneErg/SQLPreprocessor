@@ -6,6 +6,7 @@
     use EugeneErg\SQLPreprocessor\Variable;
     use EugeneErg\SQLPreprocessor\Translaters;
     use EugeneErg\SQLPreprocessor\SQL;
+    use EugeneErg\SQLPreprocessor\Query;
     
     function dd() {
         $res = '<? ';
@@ -40,14 +41,11 @@
         from($var = new Variable('tabel_name'))->{
             from($var2 = new Variable('tabel_name2'))
                 ->from($var3 = new Variable('tabel_name3'))
-                    ->var('test')
-                        ->return(12)
-                    ->endvar
                 ->endfrom
             ->endfrom
         }
         ->select()->{
-            sql()->return($var3('test'))
+            sql()->return($var3->id->count())
         };
 
     $query(Translaters\MySql::instance(), function($query) {

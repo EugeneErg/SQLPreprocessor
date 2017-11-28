@@ -311,28 +311,12 @@ final class Query {
         if (!$this->isMultiCorrelate()) {
             return [$fields];
         }
-        if (!count($this->groupby)) {
+        if (count($this->groups)) {
             return [1 => $fields];
         }
-        /*
-            лимит не равен 1 и отсутствует группировка.
-            в этом случае множественные значения будут для не агрегатных полей, агрегатные, такие как count() max() min() .. будут возвращать единственное значение, так же как (count() + 5) и т д
-            
-        */
-        dd($fields);
         $result = [];
         foreach ($fields as $hash => $field) {
-            if ($field->query != $this || $field->type == 'Field') {
-                $result[1][$hash] = $field;
-                continue;
-            }
-            //можем пробежать либо по дочерним фиелдам, либо по функциям
-            //задача: определить какие фиелды являются агрегатными или содержат в себе агрегаты
-            
-            if (!isset($field->isContainsAggregate)) {
-                $field->isContainsAggregate = $this->findAggregatesFunction($field->function);
-            }
-            $result[!$field->isContainsAggregate][$hash] = $field;
+            $result[!!$field->getAggregateLevel()][$hash] = $field;
         }
         return $result;
     }

@@ -1,10 +1,15 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
 final class Field {
+    const TYPE_FIELD = 'field';
+    const TYPE_VARIABLE = 'variable';
+    const TYPE_BLOCK = 'block';
+    const TYPE_NULL = null;
     private $context;
     private $object;
     private $functions = [];
     private $aggregateLevel;
+    private $type;
 
     public function __debugInfo() {
         return [
@@ -18,6 +23,7 @@ final class Field {
         $notFunctionCount = !count($functions);
         while ($object instanceof Self) {
             $oContext = $object->getContext();
+            $this->type = Self::TYPE_FIELD;
             if ($oContext === $context) {
                 $this->aggregateLevel = $object->aggregateLevel;
                 if ($notFunctionCount || !count($object->functions)) {
@@ -34,9 +40,18 @@ final class Field {
         }
         if ($object instanceof Variable) {
             $oContext = $context->find($object);
+            $this->type = Self::TYPE_VARIABLE;
         }
-        elseif (!($object instanceof Self)) {
+        elseif (is_array($object)) {
             $oContext = $context;
+            $this->type = Self::TYPE_BLOCK;
+        }
+        elseif (!$object instanceof Self) {
+            $oContext = $context;
+            $this->type = Self::TYPE_NULL;
+        }
+        if (!isset($this->aggregateLevel)) {
+            $this->aggregateLevel = 0;
         }
         $this->context = $notFunctionCount ? $oContext : $context;
 
@@ -106,5 +121,8 @@ final class Field {
     }
     public function getContext() {
         return $this->context;
+    }
+    public function getType() {
+        return $this->type;
     }
 }
