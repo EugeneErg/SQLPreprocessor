@@ -204,10 +204,14 @@ final class Query {
         return $this->variable[$name];
     }
     public function addVariable(array $childs, $name) {
+        if (isset($this->variable[$name])) {
+            throw new \Exception('Запрещено переопределять переменные');
+        }
         return $this->variable[$name] = $this->addField($childs);
     }
     public function addSelect(array $childs) {
-        return $this->select[] = $this->addField($childs);
+        $field = $this->addField($childs);
+        return $this->select[spl_object_hash($field)] = $field;
     }
     public function addOrder(array $childs, $asc = true) {
         $this->orders[] = (object) [
@@ -261,13 +265,13 @@ final class Query {
         }
         return $query;
     }
-    private function checkContext($dest, $isMultiCorrelate = false) {
+    private function checkContext(Query $dest, $isMultiCorrelate = false) {
         if ($dest === $src = $this) {
             return null;
         }
         $destLevel = $dest->level;
         $srcLevel = $src->level;
-        
+
         if ($srcLevel <= $destLevel) {
             if ($destLevel > $srcLevel) {
                 for (; $destLevel > $srcLevel + 1; $destLevel--) {
@@ -278,7 +282,7 @@ final class Query {
                 }
                 $dest = $dest->levelUp();
             }
-            if ($src == $dest) {
+            if ($src === $dest) {
                 return null;//src является предком dest, данные не извлекаются
             }
             $dest = $dest->levelUp();//делаем уровень dest, выше, уровня src
@@ -315,7 +319,7 @@ final class Query {
         }
         $result = [];
         foreach ($fields as $hash => $field) {
-            $result[$field->getContext() !== $this || !!$field->getAggregateLevel()][$hash] = $field;
+            $result[$field->getContext() !== $this || !$field->getAggregateLevel()][$hash] = $field;
         }
         return $result;
     }
