@@ -30,7 +30,6 @@ final class SQL {
         $structure = new Structure();
         $if = new Structure(1, 1, ['or', 'and']);
             $else = new Structure();
-            $endif = new Structure();
         $switch = new Structure(1, 1);
             $case = new Structure(0, 0, ['or', 'and']);
             $default = new Structure();
@@ -43,8 +42,8 @@ final class SQL {
             $insert = new Structure();
         $update = new Structure(1);
         $delete = new Structure(1);
-        $return = new Structure(0, 1);//ретерн не имеет дочерних блоков, поэтому не будет нуждаться в закрывающей функции
-                
+        $return = new Structure(0, 1, ['or', 'and']);//ретерн не имеет дочерних блоков, поэтому не будет нуждаться в закрывающей функции
+
         
         //блок if
         $if->addBlock('else', $else);
@@ -66,8 +65,8 @@ final class SQL {
         foreach (['from', 'delete'] as $name) {
             $$name->addChild('from', $from);
             $$name->addChild('return', $return, 'return');
-            $$name->addChild('if', $if, 'if');
-            $$name->addChild('switch', $switch, 'switch');
+            //$$name->addChild('if', $if, 'if');
+            //$$name->addChild('switch', $switch, 'switch');
             $$name->addChild('var', $var);
             $$name->addChild('groupby', $groupby);
             $$name->addChild('orderby', $orderby);
@@ -400,6 +399,39 @@ final class SQL {
             }
         }
     }
+    private function createSelectObject($select, $row, &$prev) {
+        if (is_null($prev)) {
+            $prev = array();
+        }
+        if (is_null($select->key)) {
+            $prev[] = null;
+            end($prev);
+            $key = key($prev);
+        }
+        elseif (is_scalar($select->key)) {
+            $key = $select->key;
+        }
+        else {
+            $key = $row[$select->key->context];
+        }
+        if (isset($select->value)) {
+            $prev[$key] = $row[$select->value->context];
+        }
+        else {
+            foreach ($select->childs as $child) {
+                $this->createSelectObject($child, $row, $prev[$key]);
+            }
+        }
+    }
+    private function createResult($res, \StdClass $select) {
+        $result = null;
+        foreach ($res as $row) {
+            foreach ($select->childs as $child) {
+                $this->createSelectObject($child, $row, $result);
+            }
+        }
+        return $result;
+    }
     public function __invoke(Translater $sqlClass, \Closure $function = null) {
         //если функци не передона, возвращаем текст запроса
         $structure = new \StdClass();
@@ -412,11 +444,9 @@ final class SQL {
         $this->getFields($structure, $query);
         $this->parseTreeFunctions($structure, ['orderby', 'groupby', 'insert', 'into', 'select', 'var', 'from', 'delete'], $query);
         unset($structure);
-        $query->calculatePathsVariables();
-
-        var_dump($query);
-        die();
-
-        //$sqlClass->translate($query);
+        if (is_null($function)) {
+            return $query->analyze();
+        }
+        return $this->createResult($function($query->analyze()), $select);
     }
 }

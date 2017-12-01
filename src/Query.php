@@ -4,6 +4,10 @@ final class Query {
     const JOIN_LEFT = 'left';
     const JOIN_RIGHT = 'right';
     const JOIN_CORRELATE = 'correlate';
+
+    const CONDITION_PARENT = 'parent';
+    const CONDITION_AGGREGATE = 'agregeate';
+    const CONDITION_CHILD = 'child';
     //const JOIN_UNION = 'union';
     
     private $index;
@@ -45,6 +49,11 @@ final class Query {
             'select' => $this->select,
         ];
     }*/
+    public function getInclude(Field $field) {
+        if (isset($this->include[$hash = spl_object_hash($field)])) {
+            return $this->include[$hash];
+        }
+    }
     public function isCorrelate() {
         return $this->join === Self::JOIN_CORRELATE;
     }
@@ -368,7 +377,7 @@ final class Query {
         }
         return $this->childs[$query->context] = $query;
     }
-    public function calculatePathsVariables() {
+    private function calculatePathsVariables() {
         foreach (array_reverse($this->childs) as $child) {
             if ($child->isMultiCorrelate()) {
                 $child->calculatePathsVariables();
@@ -425,5 +434,203 @@ final class Query {
                     }
             }
         }
+    }
+    private function conditionFieldAnalyze(Field $field, $not = false) {
+        if ($this->getInclude($field)->level == -1) {
+            return [(object)[
+                'not' => $not,
+                'type' => 'field',
+                'field' => $field,
+            ]];
+        }
+        return $this->conditionFunctionsAnalyze($field->getObject(), $field->getFunctions(), $not);
+    }
+    private function conditionArgumentAnalyze(Argument $arg, $not = false) {
+        if ($arg->getType() != Argument::IS_FIELD) {
+            return [(object)[
+                'not' => $not,
+                'type' => 'args',
+                'args' => [$arg],
+            ]];
+        }
+        return $this->conditionFieldAnalyze($arg->getValue(), $not);
+    }
+    private function conditionArgumentsAnalyze(array $args, $not = false) {
+        if (2 == $count = count($args)) {
+            $args[2] = $args[1];
+            static $specArg;
+            if (!isset($specArg)) {
+                $specArg = new Argument('=');
+            }
+            $args[1] = $specArg;
+        }
+        elseif ($count % 2 != 1) {
+            throw new \Exception('неверное количество аргументов ' . $count);
+        }
+        //return($var->id->or()->and()->or(), 'or', 2)->and(3)//помним, что вызываемые функции аргументов могут содержать булеановские функции
+        for ($i = 1; $i < count($args); $i+=2) {
+            switch ($value = $args[$i]->getValue()) {
+                case 'and':
+                case '&&':
+                case 'or':
+                case '||':
+                    if ((in_array($value, ['and', '&&'])) !== $not) {
+                        return [(object)[
+                            'not' => $not,
+                            'type' => 'args',
+                            'args' => $args,
+                        ]];
+                    }
+                default:
+                    continue;
+            }
+        }
+        $result = [];
+        $res = [];
+        foreach ($args as $num => $arg) {
+            if ($num % 2 !== 0 || !in_array($arg->getValue(), ['and', '&&', 'or', '||'])) {
+                $res[] = $arg;
+                continue;
+            }
+            if (count($res) == 1) {
+                $result[] = $this->conditionArgumentAnalyze($res, $not);
+            }
+            else {
+                $result[] = [(object)[
+                    'not' => $not,
+                    'type' => 'args',
+                    'args' => $res,
+                ]];
+            }
+            $res = [];
+        }
+        if (count($res)) {
+            $result[] = [(object)[
+                'not' => $not,
+                'type' => 'args',
+                'args' => $res,
+            ]];
+        }
+        return call_user_func_array('array_merge', $result);
+    }
+    private function conditionFunctionsAnalyze($object, $functions, $not = false) {
+        $reverseFunctions = array_reverse($functions);
+        $oneCondition = false;
+        foreach ($reverseFunctions as $function) {
+            switch ($name = $function->getName()) {
+                case 'not':
+                    $not = !$not;
+                    continue(2);
+                case 'and':
+                case 'or':
+                    if (($name == 'and') !== $not) {
+                        continue(2);
+                    }
+                    $oneCondition = true;
+                default:
+                    break(2);
+            }
+        }
+        $result = [];
+        if (!$oneCondition) {
+            foreach ($reverseFunctions as $num => $function) {
+                switch ($name = $function->getName()) {
+                    case 'not':
+                        $not = !$not;
+                        continue(2);
+                    case 'and':
+                    case 'or':
+                        $result[] = $this->conditionArgumentsAnalyze($function->getArgs(), $not);
+                    default:
+                        $functions = array_slice($functions, 0, -$num);//функции объекта
+                        break(2);
+                }
+            }
+            if (count($reverseFunctions) - 1 == $num) {
+                $functions = [];
+            }
+            if (!count($functions) && is_object($object)) {
+                if ($object instanceof SQLFunction) {
+                    $result[] = $this->conditionArgumentsAnalyze($object->getArgs(), $not);
+                    $object = null;
+                }
+                elseif ($object instanceof Field) {
+                    $result[] = $this->conditionFieldAnalyze($object, $not);
+                    $object = null;
+                }
+            }
+        }
+        if (count($functions) || !is_null($object)) {
+            $result[] = [(object)[
+                'not' => $not,
+                'type' => 'functions',
+                'functions' => $functions,
+                'object' => $object,
+            ]];
+        }
+        array_reverse($result);
+        return call_user_func_array('array_merge', $result);
+    }
+    private function conditionAnalyze() {
+        /*
+         * определяем тип условия:
+         * where
+         * having
+         * on
+         * */
+
+        /*
+            result:
+
+            [
+                not => false,
+                [
+                    arg1,
+                    cond1,
+                    [
+                        not => true,
+                        [
+                            arg1,
+                            cond1,
+                            arg2,
+                        ]
+                    ],
+                    cond2
+                ]
+            ]
+
+
+
+        */
+        foreach ($this->childs as $child) {
+            $child->conditionAnalyze();
+        }
+        $object = $this->condition->getObject();
+        if (!isset($object['return'][0]->function)) {
+            return;
+        }
+
+
+        if ($this->isCorrelate()) {
+            //все условия внутри
+
+        }
+        elseif (!$this->isSubQuery()) {
+            //все условия снаружи
+
+        }
+        else {
+            //получаем массив разделенных условий
+            $result = $this->conditionFunctionsAnalyze($object['return'][0]->function, $object['return'][0]->union);
+            //необходим дополнительный анализ каждого элемента массива на принадлежность к текущему запросу, агрегатным функциям или родительскому запросу
+            if ($result) {
+                die();
+            }
+        }
+    }
+    public function analyze() {
+        $this->calculatePathsVariables();
+        $this->conditionAnalyze();
+        //$this->aggregateLevelNormalization();
     }
 }

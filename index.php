@@ -40,19 +40,11 @@
     $query =
         from($var1 = new Variable('tabel_name1'))->{
             from($var2 = new Variable('tabel_name2'))
-                ->from($var5 = new Variable('tabel_name3'), Query::JOIN_CORRELATE)
-                ->endfrom
-            ->endfrom
-            ->from($var3 = new Variable('tabel_name3'), Query::JOIN_CORRELATE)
-                ->from($var4 = new Variable('tabel_name4'))
-                    ->return($var5->id)
-                ->endfrom
+                ->return(12)->or(13)
             ->endfrom
         }
         ->select()->{
             sql()->return($var1->id)
         };
 
-    $query(Translaters\MySql::instance(), function($query) {
-        dd($query);
-    });
+    $query(Translaters\MySql::instance());

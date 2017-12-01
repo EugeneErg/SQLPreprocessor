@@ -54,7 +54,7 @@ final class Argument {
         }
         return $this->value;
     }
-    function __construct($arg) {
+    public function __construct($arg) {
         $this->setValue($arg);
     }
 }
