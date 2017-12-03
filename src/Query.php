@@ -50,7 +50,7 @@ final class Query {
         ];
     }*/
     public function getInclude(Field $field) {
-        if (isset($this->include[$hash = spl_object_hash($field)])) {
+        if (isset($this->include[$hash = $this->getFieldObjectHash($field->getObject())])) {
             return $this->include[$hash];
         }
     }
@@ -152,25 +152,30 @@ final class Query {
             $this->fields['Variable ' . $object] = count($this->fields);
         }
     }*/
+    private function getFieldObjectHash($object) {
+        if (is_object($object)) {
+            return spl_object_hash($object);
+        }
+        throw new \Exception('недопустимый тип объекта ' . getType($object));
+    }
+    public function getField($object) {
+        if (isset($this->include[$hash = $this->getFieldObjectHash($object)])) {
+            return $this->include[$hash]->field;
+        }
+        return new Field($this, $object);
+    }
     public function addNeed(Field $field, Query $query = null) {
-        $object = $field->getObject();//что нужно
         if (is_null($query)) {
             $query = $this;
         }
-        if (is_scalar($object)) {
-            $hash = 'SCALAR ' . $object;
-        }
-        elseif (is_object($object)) {
-            $hash = spl_object_hash($object);
-        }
-        else {
-            throw new \Exception('недопустимый тип объекта ' . getType($object));
-        }
-        if (!isset($this->include[$hash])) {
+        if (!isset($this->include[$hash = $this->getFieldObjectHash($field->getObject())])) {
             $this->include[$hash] = (object) [
                 'field' => $field,
             ];
             $prevQuery = $field->getContext();
+            if ($field->getAggregateLevel() > 0) {
+                $this->isSubQuery = true;
+            }
         }
         else {
             $prevQuery = $this->include[$hash]->query;
@@ -474,7 +479,7 @@ final class Query {
                 case '&&':
                 case 'or':
                 case '||':
-                    if ((in_array($value, ['and', '&&'])) !== $not) {
+                    if ((in_array($value, ['and', '&&'])) === $not) {
                         return [(object)[
                             'not' => $not,
                             'type' => 'args',
@@ -488,12 +493,12 @@ final class Query {
         $result = [];
         $res = [];
         foreach ($args as $num => $arg) {
-            if ($num % 2 !== 0 || !in_array($arg->getValue(), ['and', '&&', 'or', '||'])) {
+            if ($num % 2 === 0 || !in_array($arg->getValue(), ['and', '&&', 'or', '||'])) {
                 $res[] = $arg;
                 continue;
             }
             if (count($res) == 1) {
-                $result[] = $this->conditionArgumentAnalyze($res, $not);
+                $result[] = $this->conditionArgumentAnalyze($res[0], $not);
             }
             else {
                 $result[] = [(object)[
@@ -541,12 +546,16 @@ final class Query {
                     case 'and':
                     case 'or':
                         $result[] = $this->conditionArgumentsAnalyze($function->getArgs(), $not);
+                        break;
                     default:
-                        $functions = array_slice($functions, 0, -$num);//функции объекта
+                        if ($num > 0) {
+                            $functions = array_slice($functions, 0, -$num);//функции объекта
+                        }
                         break(2);
                 }
             }
-            if (count($reverseFunctions) - 1 == $num) {
+            $count = count($reverseFunctions);
+            if ($count > 0 && $count - 1 == $num) {
                 $functions = [];
             }
             if (!count($functions) && is_object($object)) {
@@ -568,8 +577,52 @@ final class Query {
                 'object' => $object,
             ]];
         }
-        array_reverse($result);
-        return call_user_func_array('array_merge', $result);
+        return call_user_func_array('array_merge', array_reverse($result));
+    }
+    private function conditionTypeFunctionsAnalyze(array $functions, $object = null) {
+        $result = [];
+        if ($object instanceof Variable) {
+            $result[] = $this->conditionTypeVariableAnalyze($object);
+        }
+        elseif ($object instanceof Field) {
+            $result[] = $this->conditionTypeFieldAnalyze($object);
+        }
+        elseif ($object instanceof SQLFunction) {
+            $result[] = $this->conditionTypeFunctionAnalyze($object);
+        }
+        foreach ($functions as $function) {
+            $result[] = $this->conditionTypeFunctionAnalyze($function);
+        }
+        return call_user_func_array('array_merge', array_reverse($result));
+    }
+    private function conditionTypeAnalyze(\StdClass $condition) {
+        switch ($condition->type) {
+            case 'args':
+                return $this->conditionTypeArgsAnalyze($condition->args);
+            case 'field':
+                return $this->conditionTypeFieldAnalyze($condition->field);
+            case 'functions':
+                return $this->conditionTypeFunctionsAnalyze($condition->functions, $condition->object);
+        }
+    }
+    private function conditionTypesAnalyze(array $conditions = []) {
+        $result = (object) [
+            'where' => [],
+            //'having' => [],
+            'on' => [],
+            'move' => [],
+        ];
+        foreach ($conditions as $condition) {
+            if (count($res = $this->conditionTypeAnalyze($condition))) {
+                $result->on[] = $condition;
+                $result->move[] = $res;
+            }
+            else {
+                $result->where[] = $condition;
+            }
+        }
+        $result->move = call_user_func_array('array_merge', $result->move);
+        return $result;
     }
     private function conditionAnalyze() {
         /*
@@ -613,19 +666,17 @@ final class Query {
 
         if ($this->isCorrelate()) {
             //все условия внутри
-
+            die();
         }
         elseif (!$this->isSubQuery()) {
             //все условия снаружи
-
+            die();
         }
         else {
             //получаем массив разделенных условий
-            $result = $this->conditionFunctionsAnalyze($object['return'][0]->function, $object['return'][0]->union);
+            $conditions = $this->conditionFunctionsAnalyze($object['return'][0]->function, $object['return'][0]->union);
             //необходим дополнительный анализ каждого элемента массива на принадлежность к текущему запросу, агрегатным функциям или родительскому запросу
-            if ($result) {
-                die();
-            }
+            $this->conditionTypesAnalyze($conditions);
         }
     }
     public function analyze() {

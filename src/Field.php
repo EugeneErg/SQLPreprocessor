@@ -20,10 +20,17 @@ final class Field {
         ];
     }*/
     public function __construct(Query $context, $object = null, array $functions = []) {
+        $contextFromObject = !count($functions);
+        if (!$contextFromObject
+            && !is_null($object)
+            && !$object instanceof Self
+        ) {
+            $object = $context->getField($object);
+        }
         if ($object instanceof Self) {
             $oContext = $object->getContext();
             $this->type = Self::TYPE_FIELD;
-            if ($oContext === $context || !count($functions)) {
+            if ($oContext === $context || $contextFromObject) {
                 $this->aggregateLevel = $object->aggregateLevel;
             }
         }
@@ -42,7 +49,7 @@ final class Field {
         if (!isset($this->aggregateLevel)) {
             $this->aggregateLevel = 0;
         }
-        $this->context = count($functions) ? $context : $oContext;
+        $this->context = $contextFromObject ? $oContext : $context;
 
         foreach ($functions as $function) {
             $this->aggregateLevel += $this->getFunctionAggregateLevel($function);
