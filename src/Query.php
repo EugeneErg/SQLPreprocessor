@@ -34,6 +34,8 @@ final class Query {
     private $select = [];
     private $output = [];
     private $include = [];
+    private $where = [];
+    private $on = [];
     private $condition;
     private $intoTable;
 
@@ -50,7 +52,10 @@ final class Query {
         ];
     }*/
     public function getInclude(Field $field) {
-        if (isset($this->include[$hash = $this->getFieldObjectHash($field->getObject())])) {
+        if (is_array($object = $field->getObject())) {
+            $object = $field;
+        }
+        if (isset($this->include[$hash = $this->getFieldObjectHash($object)])) {
             return $this->include[$hash];
         }
     }
@@ -441,7 +446,9 @@ final class Query {
         }
     }
     private function conditionFieldAnalyze(Field $field, $not = false) {
-        if ($this->getInclude($field)->level == -1) {
+        if ($this->getInclude($field)->level == -1
+            || !in_array($field->getType(), [Field::TYPE_FIELD, Field::TYPE_NULL])
+        ) {
             return [(object)[
                 'not' => $not,
                 'type' => 'field',
@@ -459,6 +466,16 @@ final class Query {
             ]];
         }
         return $this->conditionFieldAnalyze($arg->getValue(), $not);
+    }
+    private function mergeResult($result) {
+        switch (count($result)) {
+            case 0:
+                return [];
+            case 1:
+                return reset($result);
+            default:
+                return call_user_func_array('array_merge', $result);
+        }
     }
     private function conditionArgumentsAnalyze(array $args, $not = false) {
         if (2 == $count = count($args)) {
@@ -516,7 +533,8 @@ final class Query {
                 'args' => $res,
             ]];
         }
-        return call_user_func_array('array_merge', $result);
+        return $this->mergeResult($result);
+
     }
     private function conditionFunctionsAnalyze($object, $functions, $not = false) {
         $reverseFunctions = array_reverse($functions);
@@ -570,39 +588,123 @@ final class Query {
             }
         }
         if (count($functions) || !is_null($object)) {
+            if ($object instanceof SQLFunction) {
+                array_unshift($functions, $object);
+                $object = null;
+            }
             $result[] = [(object)[
                 'not' => $not,
-                'type' => 'functions',
-                'functions' => $functions,
-                'object' => $object,
+                'type' => 'field',
+                'field' => $this->addField($object, $functions),
             ]];
         }
-        return call_user_func_array('array_merge', array_reverse($result));
+        return $this->mergeResult($result);
     }
-    private function conditionTypeFunctionsAnalyze(array $functions, $object = null) {
-        $result = [];
-        if ($object instanceof Variable) {
-            $result[] = $this->conditionTypeVariableAnalyze($object);
+    private function conditionTypeBlockAnalyze(array $blocks, \StdClass $result) {
+        $return = 0;
+        foreach ($blocks as $block) {
+            if (isset($blocks->next)) {
+                $return = conditionTypeBlockAnalyze([$block->next], $result) || $return;
+            }
+            $return = $this->conditionTypeFunctionsAnalyze($block->union, null, $result) || $return;
+            foreach ($block->childs as $child) {
+                $return = $this->conditionTypeBlockAnalyze($child, $result) || $return;
+            }
         }
-        elseif ($object instanceof Field) {
-            $result[] = $this->conditionTypeFieldAnalyze($object);
+        return $return;
+    }
+    private function conditionTypeFieldFunctionsAnalyze(Field $field, array $functions, \StdClass $result, $pos = 0) {
+        /*
+         * необходимо анализировать функции рекурсивно,
+         * и в последнюю очередь анализировать объект
+         * в некоторых случаях создавать новые фиелды из урезанных функций и ссылаться на них из текущего фиелда
+         * */
+        if ($pos >= count($functions)) {
+            return ($field->getType() !== Field::TYPE_NULL) && $this->conditionTypeFieldAnalyze($field, $result);
         }
-        elseif ($object instanceof SQLFunction) {
-            $result[] = $this->conditionTypeFunctionAnalyze($object);
+        $function = $functions[$pos];
+        if ($function->isAggregate()) {
+            //агрегатная функция должна быть в условиях on и необходимо перенести во внешний запрос
+            $subField = $field->splitFunction($pos);
+            $result->move[spl_object_hash($subField)] = $subField;
+            return 1;
         }
+        //первыя функция по сути является нулевым аргументом
+        $move = $result->move;
+        $result->move = [];
+        $return = $this->conditionTypeFieldFunctionsAnalyze($field, $functions, $result, $pos + 1);
+        $return = $this->conditionTypeArgsAnalyze($function->getArgs(), $result) || $return;
+        if ($return) {
+            $result->move = array_merge($move, $result->move);
+            return 1;
+        }
+        $result->move = $move;
+        return 0;
+    }
+    private function conditionTypeFieldAnalyze(Field $field, \StdClass $result) {
+        /*
+         * В каждой функции предпологаем что перемещение текущих необходимо,
+         * но преремещание дочерних зависит от возвращаемого значения
+         * */
+        $hash = spl_object_hash($field);
+        if (isset($result->levels[$hash])) {
+            return $result->levels[$hash];
+        }
+        $include = $this->getInclude($field);
+        if ($include->level != 0) {
+            return $result->levels[$hash] = $include->level == 1;
+        }
+        if (in_array($type = $field->getType(), [Field::TYPE_FIELD, Field::TYPE_NULL])) {
+            $move = $result->move;
+            $result->move = [];
+            if ($this->conditionTypeFieldFunctionsAnalyze($field, array_reverse($field->getFunctions()), $result)) {
+                $result->move = array_merge( $move, $result->move);
+                return $result->levels[$hash] = 1;
+            }
+            $result->move = array_merge($move, [$hash => $field]);
+            return $result->levels[$hash] = 0;
+        }
+        if ($field->getType() == Field::TYPE_VARIABLE) {
+            $result->move[] = $field->getObject();
+            return $result->levels[$hash] = 0;
+        }
+        elseif ($field->getType() == Field::TYPE_BLOCK) {
+            $move = $result->move;
+            $result->move = [];
+            if ($this->conditionTypeBlockAnalyze($field->getObject(), $result)) {
+                $result->move = array_merge($move, $result->move);
+                return $result->levels[$hash] = 1;
+            }
+            $result->move = array_merge($move, [$hash => $field]);
+            return $result->levels[$hash] = 0;
+        }
+    }
+    private function conditionTypeArgsAnalyze(array $args, \StdClass $result) {
+        $return = 0;
+        foreach ($args as $arg) {
+            if ($arg->getType() == Argument::IS_FIELD) {
+                $return = $this->conditionTypeFieldAnalyze($arg->getValue(), $result) || $return;
+            }
+        }
+        return $return;
+    }
+    private function conditionTypeFunctionsAnalyze(array $functions, $object = null, \StdClass $result) {
+        if ($object instanceof SQLFunction) {
+            array_unshift($functions[], $object);
+            $object = null;
+        }
+        $return = ($object instanceof Field) && $this->conditionTypeFieldAnalyze($object, $result);
         foreach ($functions as $function) {
-            $result[] = $this->conditionTypeFunctionAnalyze($function);
+            $return = $this->conditionTypeArgsAnalyze($function->getArgs(), $result) || $return;
         }
-        return call_user_func_array('array_merge', array_reverse($result));
+        return $return;
     }
-    private function conditionTypeAnalyze(\StdClass $condition) {
+    private function conditionTypeAnalyze(\StdClass $condition, \StdClass $result) {
         switch ($condition->type) {
             case 'args':
-                return $this->conditionTypeArgsAnalyze($condition->args);
+                return $this->conditionTypeArgsAnalyze($condition->args, $result);
             case 'field':
-                return $this->conditionTypeFieldAnalyze($condition->field);
-            case 'functions':
-                return $this->conditionTypeFunctionsAnalyze($condition->functions, $condition->object);
+                return $this->conditionTypeFieldAnalyze($condition->field, $result);
         }
     }
     private function conditionTypesAnalyze(array $conditions = []) {
@@ -613,15 +715,13 @@ final class Query {
             'move' => [],
         ];
         foreach ($conditions as $condition) {
-            if (count($res = $this->conditionTypeAnalyze($condition))) {
+            if ($this->conditionTypeAnalyze($condition, $result)) {
                 $result->on[] = $condition;
-                $result->move[] = $res;
             }
             else {
                 $result->where[] = $condition;
             }
         }
-        $result->move = call_user_func_array('array_merge', $result->move);
         return $result;
     }
     private function conditionAnalyze() {
@@ -666,22 +766,372 @@ final class Query {
 
         if ($this->isCorrelate()) {
             //все условия внутри
-            die();
+            $conditions = (object) [
+                'where' => [
+                    (object)[
+                        'not' => false,
+                        'type' => 'field',
+                        'field' => $this->condition,
+                    ]
+                ],
+                'on' => [],
+                'move' => [],
+            ];
         }
         elseif (!$this->isSubQuery()) {
             //все условия снаружи
-            die();
+            $conditions = (object) [
+                'on' => [
+                    (object)[
+                        'not' => false,
+                        'type' => 'field',
+                        'field' => $this->condition,
+                    ]
+                ],
+                'where' => [],
+                'move' => [],
+            ];
         }
         else {
             //получаем массив разделенных условий
             $conditions = $this->conditionFunctionsAnalyze($object['return'][0]->function, $object['return'][0]->union);
             //необходим дополнительный анализ каждого элемента массива на принадлежность к текущему запросу, агрегатным функциям или родительскому запросу
-            $this->conditionTypesAnalyze($conditions);
+            $conditions = $this->conditionTypesAnalyze($conditions);
         }
+        foreach ($conditions->move as $field) {
+            $this->addNeed($field, $this->parent);
+        }
+        $this->where = $conditions->where;
+        $this->on = $conditions->on;
+    }
+    final private function getAggregateLevel($query, &$levels, $field) {
+        /*
+         * Необходимо вычислять точное место смены агрегатного уровня
+         * */
+        $include = $query->include($field);
+        if ($include->level != 0 || $field->type == 'Field') {
+            $levels[$field->context] = array(0, 0);
+            return;
+        }
+        $level = $field->type == 'Function' && !empty($field->function[0]->is_aggregates);
+        $level = $this->getAggregateFunctionLevel($query, $levels, $field->function, (int)$level);
+        if (($field->type == 'Function' && !empty($field->function[0]->is_aggregates)) || $level == 0) {
+            $levels[$field->context] = array($level, 0);
+        }
+    }
+    private function aggregateLevelNormalization() {
+        foreach ($this->childs() as $child) {
+            $child->aggregateLevelNormalization();
+        }
+        if (!$this->isSubQuery() || $this->isCorrelate() || !count($this->select)) {
+            return;
+        }
+        $validLevel = 1 + !!count($this->groups);
+        $levels = [];
+        $maxLevel = 0;
+        $minLevel = $validLevel;
+        foreach ($this->select as $select) {
+            $level = $select->getAggregateLevel();
+            if ($minLevel > $level) {
+                $minLevel = $level;
+            }
+            if ($maxLevel < $level) {
+                $maxLevel = $level;
+            }
+            if ($level > $validLevel) {
+                throw new \Exception('Недопустимый уровень агрегатности');
+            }
+            $levels[$level] = $select;
+        }
+        if (!count($this->groups)) {
+            /*
+                нет группировки и есть агрегатная функция
+                JOIN (
+                    SELECT
+                        `2`.`id` `2.0`,
+                        `3`.`2.1`
+                    FROM `table` `2`
+                    JOIN (
+                        SELECT
+                            COUNT(*) `2.1`
+                            HAVING?
+                        FROM `table` `3`
+                        WHERE
+                        LIMIT 1,2
+
+                    )`3`
+                    WHERE + HAVING
+                    HAVING
+                )`2`
+                клонируем запрос как дочерний с объединением join
+            */
+            $cloneQuery = $query->addClone($query);
+            $cloneQuery->where = $query->where;
+
+            if (!isset($moveLevels[1][0])) {
+                die(print_by_level(array($moveLevels, $minLevel, $maxLevel), 5));
+            }
+            foreach ($moveLevels[1][0] as $hash => $field) {
+                $cloneQuery->addSelect($field);
+                $cloneInclude = $cloneQuery->include($field);
+                $cloneInclude->query = $cloneQuery;
+
+                $include = $query->include($field);
+                $include->query = $cloneQuery;
+                $include->level = -1;
+            }
+            //если нет родителя, стоит on объединить с where, так как агрегатных функций в запросе больше нет
+            /*if (is_null($query->parent)) {
+                die('необходимо проверить работоспособность инструкции');
+                if ($query->where) {
+                    $query->where += $query->on;
+                }
+                else {
+                    $query->where = $query->on;
+                }
+                $query->on = null;
+            }*/
+            if ($query->where) {
+                $query->where += $query->having;
+            }
+            else {
+                $query->where = $query->having;
+            }
+            $query->having = null;
+        }
+        else {
+            /*
+                имеется группировка, агрегатные функции на извлечении и агрегатный уровень извлекаемых переменных варируется от 0 до 2
+
+                1) $minLevel - минимальный агрегатный уровень
+                2) группировка попадает в селекты запросов
+            */
+            //ksort($moveLevels);
+
+
+            if (isset($moveLevels[2])) {//стоит выполнять вначале
+                //оптимизировать при отсутсвии 0 уровня
+                if (count($moveLevels) == 1) {
+                    $cloneQuery1 = $query;
+                    $cloneQuery2 = $query->addClone($query);
+                }
+                else {
+                    $newQuery = new Query();
+                    $cloneQuery1 = $newQuery->addClone($query);
+                    $cloneQuery1->groupbyClear();
+                    $cloneQuery2 = $cloneQuery1->addClone($query);
+                    $cloneQuery2->where = $query->where;
+                    $cloneQuery2->having = $query->having;
+                    foreach ($moveLevels[2][0] as $field) {
+                        $cloneQuery1->addSelect($field);
+                        $cloneQuery1->addInclude($field);
+                    }
+                }
+                foreach ($moveLevels[2][1] as $field) {
+                    $cloneQuery2->addSelect($field);
+                    $cloneQuery1->addInclude($field, $cloneQuery2);
+                }
+
+                /*
+                    neq query {
+
+                        join(
+                            select
+                                avg(`t2`.count)
+                            from(
+                                select
+                                    count(*) `count`
+                                from table
+                                group by
+                                    group
+                                limit 1,2
+                            )t2
+                        )t3
+                    }
+                */
+
+            }
+
+            if (isset($moveLevels[1])) {
+                /*
+                    join (
+                        select
+                            group,
+                            count(*) `count`
+                        from table
+                        group by
+                            group
+                        limit 1,2
+                    )t2
+                        on t2.group=table.group
+                */
+                $cloneQuery = $query->addClone($query);
+                $cloneQuery->on = array();
+                /*
+                    добавляем в селект все переменные, а так же группировку
+
+                */
+                foreach ($moveLevels[1][0] as $field) {
+                    $cloneQuery->addSelect($field);
+                    $cloneInclude = $cloneQuery->include($field);
+                    $cloneInclude->query = $cloneQuery;
+
+                    $include = $query->include($field);
+                    $include->query = $cloneQuery;
+                    $include->level = -1;
+                }
+                foreach ($query->groupby() as $field) {//группировка должна быть не перенесена а продублированна {on t2.group=table.group}
+                    $cloneQuery->addSelect($field);
+
+
+                    $hash = 'clone #' . count($field::fields($query));
+                    $cloneField = $query->addField($hash, $field->type, $field->function);
+                    $query->addInclude($cloneField);
+                    $query->addInclude($field, $cloneQuery);
+
+                    $cloneQuery->on[] = (object) array (
+                        'not' => false,
+                        'args' => array (
+                            (object) array (
+                                'type' => 'uses',
+                                'value' => $field,
+                            ),
+                            (object) array (
+                                'type' => 'string',
+                                'value' => '=',
+                            ),
+                            (object) array (
+                                'type' => 'uses',
+                                'value' => $cloneField,
+                            )
+                        )
+                    );
+                }
+            }
+            if (isset($moveLevels[2]) && count($moveLevels) != 1) {
+                $query->moveToChild($cloneQuery1);
+                foreach ($moveLevels[2][0] as $field) {
+                    $query->addInclude($field, $cloneQuery1);
+                }
+            }
+            //$newQuery
+            /*
+                1) создаем новый запрос
+                2) копируем в него текущий запрос
+                3) переносим в селект скопированного запроса агрегаты второго уровня
+                4) переносим новый запрос в качестве дочернего запроса, в текущий запрос
+            */
+            /*
+                join(
+                    select
+                        avg(`t2`.count)
+                    from(
+                        select
+                            count(*) `count`
+                        from table
+                        group by
+                            group
+                        limit 1,2
+                    )t2
+                )t3
+            */
+            $query->groupbyClear();
+            $query->distinct(true);
+            /*if (is_null($query->parent)) {
+                //die('необходимо проверить работоспособность инструкции');
+                if ($query->where) {
+                    $query->where += $query->on;
+                }
+                else {
+                    $query->where = $query->on;
+                }
+                $query->on = null;
+            }*/
+            if ($query->having) {
+                if ($query->where) {
+                    $query->where += $query->having;
+                }
+                else {
+                    $query->where = $query->having;
+                }
+                $query->having = null;
+            }
+
+            /*
+                есть группировка
+
+                select distinct
+                    id,
+                    t2.count
+                    t2.avg_count
+                from table
+
+                join (
+                    select
+                        group,
+                        count(*) `count`
+                    from table
+                    group by
+                        group
+                    limit 1,2
+                )t2
+                    on t2.group=table.group
+
+                join (
+                    select
+                        avg(`t2`.count)
+                    from (
+                        select
+                            count(*) `count`
+                        from table
+                        group by
+                            group
+                        limit 1,2
+                    )t2
+                )t3
+            */
+
+
+
+        }
+
+
+        /*
+            каждый запрос может содержать функции разных уровней агрегатности
+
+            запросы, содержащие функции разных уровней агрегатности считаются невалидными
+
+            необходимо привести их к одному уровню
+
+            понятно, что уровень накапливается в зависимости от вложенности функции
+
+            следовательно в любом запросе будут присутсвовать все уровни агрегатности
+
+            подсчет стоит вести по тем переменным, которые должны быть извлечены
+
+            и по тем, которые сравниваются с родительскими условиями и могут попасть в "on"
+
+            при этом условия потециального having не обязательно должны оказаться в нем, так как вероятно их уровень модифицируется
+
+            вероятно придется изменить(упростить) алгоритм вычисления внешних условий по причине непринципиальности перенесения агрегатных функций
+
+            либо модифицировать:
+                разбирать условия нужно будет по трем типам
+                1) условия которые могут быть внутри запроса
+                2) условия, которые могут быть только вне запроса
+                3) агрегатные условия (желательно перенести вне, но можно оставить и в рамках запроса, если перерасчитать агрегатный уровень)
+
+        */
+        /*
+            извлекаемые переменные должны иметь один уровень агрегатности
+            извлекаемые переменные:
+                все что в селекте
+
+        */
     }
     public function analyze() {
         $this->calculatePathsVariables();
         $this->conditionAnalyze();
-        //$this->aggregateLevelNormalization();
+        $this->aggregateLevelNormalization();
     }
 }

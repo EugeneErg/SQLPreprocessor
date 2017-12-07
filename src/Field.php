@@ -47,7 +47,7 @@ final class Field {
             $this->type = Self::TYPE_NULL;
         }
         if (!isset($this->aggregateLevel)) {
-            $this->aggregateLevel = 0;
+            $this->aggregateLevel = [];
         }
         $this->context = $contextFromObject ? $oContext : $context;
 
@@ -72,6 +72,9 @@ final class Field {
         }
     }
     public function getAggregateLevel() {
+        if (is_array($this->aggregateLevel)) {
+            return count($this->aggregateLevel);
+        }
         return $this->aggregateLevel;
     }
     private function getFunctionAggregateLevel($function) {
@@ -120,5 +123,11 @@ final class Field {
     }
     public function getType() {
         return $this->type;
+    }
+    public function splitFunction($pos) {
+        $field = $this->object = clone $this;
+        array_splice($field->functions, - ($pos + 1));
+        $this->functions = array_slice($this->functions, - ($pos + 1));
+        return $field;
     }
 }
