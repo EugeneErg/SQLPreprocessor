@@ -9,6 +9,8 @@ final class Field {
     private $object;
     private $functions = [];
     private $aggregateLevel;
+    private $aggregates = [];
+    private $isAggregate = false;
     private $type;
 
 /*    public function __debugInfo() {
@@ -19,7 +21,10 @@ final class Field {
             'aggregateLevel' => $this->aggregateLevel,
         ];
     }*/
-    public function __construct(Query $context, $object = null, array $functions = []) {
+    private function __construct() {}
+    public static function create(Query $context, $object = null, array $functions = []) {
+        $field = new Self();
+
         $contextFromObject = !count($functions);
         if (!$contextFromObject
             && !is_null($object)
@@ -29,36 +34,53 @@ final class Field {
         }
         if ($object instanceof Self) {
             $oContext = $object->getContext();
-            $this->type = Self::TYPE_FIELD;
+            $field->type = Self::TYPE_FIELD;
             if ($oContext === $context || $contextFromObject) {
-                $this->aggregateLevel = $object->aggregateLevel;
+                $field->aggregateLevel = $object->aggregateLevel;
+                if ($object->isAggregate) {
+                    $field->aggregates = [$object];
+                }
+                else {
+                    $field->aggregates = $object->aggregates;
+                }
             }
         }
         elseif ($object instanceof Variable) {
             $oContext = $context->find($object);
-            $this->type = Self::TYPE_VARIABLE;
+            $field->type = Self::TYPE_VARIABLE;
         }
         elseif (is_array($object)) {
             $oContext = $context;
-            $this->type = Self::TYPE_BLOCK;
+            $field->type = Self::TYPE_BLOCK;
         }
         else {
             $oContext = $context;
-            $this->type = Self::TYPE_NULL;
+            $field->type = Self::TYPE_NULL;
         }
-        if (!isset($this->aggregateLevel)) {
-            $this->aggregateLevel = [];
+        if (!isset($field->aggregateLevel)) {
+            $field->aggregateLevel = 0;
         }
-        $this->context = $contextFromObject ? $oContext : $context;
-
-        foreach ($functions as $function) {
-            $this->aggregateLevel += $this->getFunctionAggregateLevel($function);
+        $field->context = $contextFromObject ? $oContext : $context;
+        $field->object = $object;
+        $field->functions = $functions;
+        foreach ($functions as $pos => $function) {
+            $field->aggregateLevel += $field->getFunctionAggregateLevel($function);
+            if ($function->isAggregate()) {
+                $field->aggregateLevel++;
+                $field->isAggregate = true;
+                if (count($functions) !== $pos + 1) {
+                    $field->functions = array_splice($functions, 0, $pos);
+                    if (!is_array($object) && !is_null($object)) {
+                        $context->addNeed($field, $oContext);
+                    }
+                    return Self::create($context, $field, array_slice($functions, 0, $pos));
+                }
+            }
         }
-        $this->object = $object;
-        $this->functions = $functions;
         if (!is_array($object) && !is_null($object)) {
-            $context->addNeed($this, $oContext);
+            $context->addNeed($field, $oContext);
         }
+        return $field;
     }
     public function getObject() {
         return $this->object;
@@ -72,9 +94,6 @@ final class Field {
         }
     }
     public function getAggregateLevel() {
-        if (is_array($this->aggregateLevel)) {
-            return count($this->aggregateLevel);
-        }
         return $this->aggregateLevel;
     }
     private function getFunctionAggregateLevel($function) {
@@ -89,10 +108,17 @@ final class Field {
                     агрегатные функции дочерних запросов передаются в неагрегатном состоянии
                     агрегатные функции родительских запросов не доступны
                 */
-                $level = max($level, $arg->getValue()->aggregateLevel);
+                $field = $arg->getValue();
+                if ($field->isAggregate) {
+                    $this->aggregates[spl_object_hash($field)] = $field;
+                }
+                else {
+                    $this->aggregates = array_merge($this->aggregates, $field->aggregates);
+                }
+                $level = max($level, $field->aggregateLevel);
             }
         }
-        return $level + (integer) $function->isAggregate();
+        return $level;
     }
     private function getStructureAggregateLevel($structure) {
         $level = $this->getChildsAggregateLevel($structure->childs);
@@ -124,10 +150,10 @@ final class Field {
     public function getType() {
         return $this->type;
     }
-    public function splitFunction($pos) {
-        $field = $this->object = clone $this;
-        array_splice($field->functions, - ($pos + 1));
-        $this->functions = array_slice($this->functions, - ($pos + 1));
-        return $field;
+    public function isAggregate() {
+        return $this->isAggregate;
+    }
+    public function getAggregates() {
+        return $this->aggregates;
     }
 }
