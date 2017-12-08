@@ -167,7 +167,7 @@ final class Query {
         if (isset($this->include[$hash = $this->getFieldObjectHash($object)])) {
             return $this->include[$hash]->field;
         }
-        return new Field($this, $object);
+        return Field::create($this, $object);
     }
     public function addNeed(Field $field, Query $query = null) {
         if (is_null($query)) {
@@ -217,7 +217,7 @@ final class Query {
         $this->include[$hash]->query = $query;
     }
     public function addField($object = null, array $functions = []) {
-        return new Field($this, $object, $functions);
+        return Field::create($this, $object, $functions);
     }
     public function getVariable($name) {
         return $this->variable[$name];
@@ -623,12 +623,6 @@ final class Query {
             return ($field->getType() !== Field::TYPE_NULL) && $this->conditionTypeFieldAnalyze($field, $result);
         }
         $function = $functions[$pos];
-        if ($function->isAggregate()) {
-            //агрегатная функция должна быть в условиях on и необходимо перенести во внешний запрос
-            $subField = $field->splitFunction($pos);
-            $result->move[spl_object_hash($subField)] = $subField;
-            return 1;
-        }
         //первыя функция по сути является нулевым аргументом
         $move = $result->move;
         $result->move = [];
@@ -654,18 +648,22 @@ final class Query {
         if ($include->level != 0) {
             return $result->levels[$hash] = $include->level == 1;
         }
+        if ($field->isAggregate()) {
+            $result->move[$hash] = $field;
+            return $result->levels[$hash] = 1;
+        }
         if (in_array($type = $field->getType(), [Field::TYPE_FIELD, Field::TYPE_NULL])) {
             $move = $result->move;
             $result->move = [];
             if ($this->conditionTypeFieldFunctionsAnalyze($field, array_reverse($field->getFunctions()), $result)) {
-                $result->move = array_merge( $move, $result->move);
+                $result->move = array_merge($move, $result->move);
                 return $result->levels[$hash] = 1;
             }
             $result->move = array_merge($move, [$hash => $field]);
             return $result->levels[$hash] = 0;
         }
         if ($field->getType() == Field::TYPE_VARIABLE) {
-            $result->move[] = $field->getObject();
+            $result->move[$hash] = $field;
             return $result->levels[$hash] = 0;
         }
         elseif ($field->getType() == Field::TYPE_BLOCK) {
@@ -713,6 +711,7 @@ final class Query {
             //'having' => [],
             'on' => [],
             'move' => [],
+            'levels' => [],
         ];
         foreach ($conditions as $condition) {
             if ($this->conditionTypeAnalyze($condition, $result)) {
@@ -725,36 +724,6 @@ final class Query {
         return $result;
     }
     private function conditionAnalyze() {
-        /*
-         * определяем тип условия:
-         * where
-         * having
-         * on
-         * */
-
-        /*
-            result:
-
-            [
-                not => false,
-                [
-                    arg1,
-                    cond1,
-                    [
-                        not => true,
-                        [
-                            arg1,
-                            cond1,
-                            arg2,
-                        ]
-                    ],
-                    cond2
-                ]
-            ]
-
-
-
-        */
         foreach ($this->childs as $child) {
             $child->conditionAnalyze();
         }
@@ -762,8 +731,6 @@ final class Query {
         if (!isset($object['return'][0]->function)) {
             return;
         }
-
-
         if ($this->isCorrelate()) {
             //все условия внутри
             $conditions = (object) [
@@ -804,21 +771,6 @@ final class Query {
         $this->where = $conditions->where;
         $this->on = $conditions->on;
     }
-    final private function getAggregateLevel($query, &$levels, $field) {
-        /*
-         * Необходимо вычислять точное место смены агрегатного уровня
-         * */
-        $include = $query->include($field);
-        if ($include->level != 0 || $field->type == 'Field') {
-            $levels[$field->context] = array(0, 0);
-            return;
-        }
-        $level = $field->type == 'Function' && !empty($field->function[0]->is_aggregates);
-        $level = $this->getAggregateFunctionLevel($query, $levels, $field->function, (int)$level);
-        if (($field->type == 'Function' && !empty($field->function[0]->is_aggregates)) || $level == 0) {
-            $levels[$field->context] = array($level, 0);
-        }
-    }
     private function aggregateLevelNormalization() {
         foreach ($this->childs() as $child) {
             $child->aggregateLevelNormalization();
@@ -841,63 +793,28 @@ final class Query {
             if ($level > $validLevel) {
                 throw new \Exception('Недопустимый уровень агрегатности');
             }
-            $levels[$level] = $select;
+            $levels[$level][] = $select;
+        }
+        if ($minLevel == $maxLevel && $maxLevel < 2) {
+            return;
         }
         if (!count($this->groups)) {
-            /*
-                нет группировки и есть агрегатная функция
-                JOIN (
-                    SELECT
-                        `2`.`id` `2.0`,
-                        `3`.`2.1`
-                    FROM `table` `2`
-                    JOIN (
-                        SELECT
-                            COUNT(*) `2.1`
-                            HAVING?
-                        FROM `table` `3`
-                        WHERE
-                        LIMIT 1,2
+            $cloneQuery = $this->addClone($this);
+            $cloneQuery->where = $this->where;
 
-                    )`3`
-                    WHERE + HAVING
-                    HAVING
-                )`2`
-                клонируем запрос как дочерний с объединением join
-            */
-            $cloneQuery = $query->addClone($query);
-            $cloneQuery->where = $query->where;
+            foreach ($levels[1] as $select) {
+                foreach ($select->getAggregates() as $field) {
+                    $cloneQuery->select[spl_object_hash($field)] = $field;
+                    $cloneInclude = $cloneQuery->include($field);
+                    $cloneInclude->query = $cloneQuery;
 
-            if (!isset($moveLevels[1][0])) {
-                die(print_by_level(array($moveLevels, $minLevel, $maxLevel), 5));
-            }
-            foreach ($moveLevels[1][0] as $hash => $field) {
-                $cloneQuery->addSelect($field);
-                $cloneInclude = $cloneQuery->include($field);
-                $cloneInclude->query = $cloneQuery;
-
-                $include = $query->include($field);
-                $include->query = $cloneQuery;
-                $include->level = -1;
-            }
-            //если нет родителя, стоит on объединить с where, так как агрегатных функций в запросе больше нет
-            /*if (is_null($query->parent)) {
-                die('необходимо проверить работоспособность инструкции');
-                if ($query->where) {
-                    $query->where += $query->on;
+                    $include = $this->include($field);
+                    $include->query = $cloneQuery;
+                    $include->level = -1;
                 }
-                else {
-                    $query->where = $query->on;
-                }
-                $query->on = null;
-            }*/
-            if ($query->where) {
-                $query->where += $query->having;
             }
-            else {
-                $query->where = $query->having;
-            }
-            $query->having = null;
+            $this->where = array_merge($this->where, $this->on);
+            $this->on = [];
         }
         else {
             /*
