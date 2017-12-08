@@ -8,7 +8,7 @@ final class SQLFunction {
 
     function __construct($name, array $args = []) {
         $this->name = mb_strtolower($name);
-        $this->is_aggregate = in_array($name, ['count', 'min', 'max', 'avg']);
+        $this->is_aggregate = in_array($name, ['count', 'min', 'max', 'avg', 'sum']);
         $this->args = Argument::byArray($args);
     }
     function getName() {
