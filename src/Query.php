@@ -723,6 +723,14 @@ final class Query {
         }
         return $result;
     }
+    private function addInclude(Field $field, Query $query) {
+        $level = ($query != $this) * (1 - 2 * isset($this->childs[$query->context]));
+        return $this->include[$this->getFieldObjectHash($field->getObject())] = (object) [
+            'field' => $field,
+            'query' => $query,
+            'level' => $level,
+        ];
+    }
     private function conditionAnalyze() {
         foreach ($this->childs as $child) {
             $child->conditionAnalyze();
@@ -765,25 +773,57 @@ final class Query {
             //необходим дополнительный анализ каждого элемента массива на принадлежность к текущему запросу, агрегатным функциям или родительскому запросу
             $conditions = $this->conditionTypesAnalyze($conditions);
         }
-        foreach ($conditions->move as $field) {
-            $this->addNeed($field, $this->parent);
+        if (!is_null($this->parent)) {
+            foreach ($conditions->move as $field) {
+                $this->parent->addInclude($field, $this);
+                $this->select[spl_object_hash($field)] = $field;
+            }
         }
         $this->where = $conditions->where;
         $this->on = $conditions->on;
     }
+    private function getLevelByField(Field $field, &$levels, $level) {
+        if ($field->isAggregate()) {
+            $fields = [$field];
+        }
+        else {
+            $fields = $field->getAggregates();
+        }
+        foreach ($fields as $field) {
+            $newLevel = $field->getAggregateLevel();
+            $levels[$level][$newLevel][spl_object_hash($field)] = $field;
+            if ($level > 1) {
+                $this->getLevelByField($field, $levels, $level);
+            }
+        }
+    }
+    private function getAggregateLevels() {
+        $result = [];
+        foreach ($this->select as $select) {
+            if (0 === $level = $select->getAggregateLevel()) {
+                $result[0][0][spl_object_hash($select)] = $select;
+                continue;
+            }
+            if ($this->getInclude($select)->level != 0) {
+                $result[0][0][spl_object_hash($select)] = $select;
+                continue;
+            }
+            $this->getLevelByField($select, $result, $level);
+        }
+        return $result;
+    }
     private function aggregateLevelNormalization() {
-        foreach ($this->childs() as $child) {
+        foreach ($this->childs as $child) {
             $child->aggregateLevelNormalization();
         }
         if (!$this->isSubQuery() || $this->isCorrelate() || !count($this->select)) {
             return;
         }
         $validLevel = 1 + !!count($this->groups);
-        $levels = [];
         $maxLevel = 0;
         $minLevel = $validLevel;
-        foreach ($this->select as $select) {
-            $level = $select->getAggregateLevel();
+        $levels = $this->getAggregateLevels();
+        foreach ($levels as $level => $fields) {
             if ($minLevel > $level) {
                 $minLevel = $level;
             }
@@ -793,7 +833,6 @@ final class Query {
             if ($level > $validLevel) {
                 throw new \Exception('Недопустимый уровень агрегатности');
             }
-            $levels[$level][] = $select;
         }
         if ($minLevel == $maxLevel && $maxLevel < 2) {
             return;
@@ -802,46 +841,43 @@ final class Query {
             $cloneQuery = $this->addClone($this);
             $cloneQuery->where = $this->where;
 
-            foreach ($levels[1] as $select) {
-                foreach ($select->getAggregates() as $field) {
-                    $cloneQuery->select[spl_object_hash($field)] = $field;
-                    $cloneInclude = $cloneQuery->include($field);
-                    $cloneInclude->query = $cloneQuery;
+            foreach ($levels[1][1] as $field) {
+                $cloneQuery->select[spl_object_hash($field)] = $field;
+                $cloneInclude = $cloneQuery->getInclude($field);
+                $cloneInclude->query = $cloneQuery;
 
-                    $include = $this->include($field);
-                    $include->query = $cloneQuery;
-                    $include->level = -1;
-                }
+                $include = $this->getInclude($field);
+                $include->query = $cloneQuery;
+                $include->level = -1;
             }
             $this->where = array_merge($this->where, $this->on);
             $this->on = [];
         }
         else {
-            /*
-                имеется группировка, агрегатные функции на извлечении и агрегатный уровень извлекаемых переменных варируется от 0 до 2
-
-                1) $minLevel - минимальный агрегатный уровень
-                2) группировка попадает в селекты запросов
-            */
-            //ksort($moveLevels);
-
-
-            if (isset($moveLevels[2])) {//стоит выполнять вначале
+            /*if (isset($levels[2])) {//стоит выполнять вначале
                 //оптимизировать при отсутсвии 0 уровня
-                if (count($moveLevels) == 1) {
-                    $cloneQuery1 = $query;
-                    $cloneQuery2 = $query->addClone($query);
+                if (count($levels) == 1) {
+                    $cloneQuery1 = $this;
+                    $cloneQuery2 = $this->addClone($this);
                 }
                 else {
                     $newQuery = new Query();
-                    $cloneQuery1 = $newQuery->addClone($query);
+                    $cloneQuery1 = $newQuery->addClone($this);
                     $cloneQuery1->groupbyClear();
-                    $cloneQuery2 = $cloneQuery1->addClone($query);
-                    $cloneQuery2->where = $query->where;
-                    $cloneQuery2->having = $query->having;
-                    foreach ($moveLevels[2][0] as $field) {
-                        $cloneQuery1->addSelect($field);
-                        $cloneQuery1->addInclude($field);
+                    $cloneQuery2 = $cloneQuery1->addClone($this);
+                    $cloneQuery2->where = $this->where;
+                    $cloneQuery2->on = $this->on;
+                    foreach ($levels[2] as $select) {
+                        if ($select->isAggregate()) {
+                            $fields = [$select];
+                        }
+                        else {
+                            $fields = $select->getAggregates();
+                        }
+                        foreach ($fields as $field) {
+                            $cloneQuery1->addSelect($field);
+                            $cloneQuery1->addInclude($field);
+                        }
                     }
                 }
                 foreach ($moveLevels[2][1] as $field) {
@@ -866,7 +902,7 @@ final class Query {
                         )t3
                     }
                 */
-
+/*
             }
 
             if (isset($moveLevels[1])) {
@@ -882,13 +918,13 @@ final class Query {
                     )t2
                         on t2.group=table.group
                 */
-                $cloneQuery = $query->addClone($query);
+  /*              $cloneQuery = $query->addClone($query);
                 $cloneQuery->on = array();
                 /*
                     добавляем в селект все переменные, а так же группировку
 
                 */
-                foreach ($moveLevels[1][0] as $field) {
+    /*            foreach ($moveLevels[1][0] as $field) {
                     $cloneQuery->addSelect($field);
                     $cloneInclude = $cloneQuery->include($field);
                     $cloneInclude->query = $cloneQuery;
@@ -952,7 +988,7 @@ final class Query {
                     )t2
                 )t3
             */
-            $query->groupbyClear();
+      /*      $query->groupbyClear();
             $query->distinct(true);
             /*if (is_null($query->parent)) {
                 //die('необходимо проверить работоспособность инструкции');
@@ -964,7 +1000,7 @@ final class Query {
                 }
                 $query->on = null;
             }*/
-            if ($query->having) {
+        /*    if ($query->having) {
                 if ($query->where) {
                     $query->where += $query->having;
                 }
@@ -972,79 +1008,8 @@ final class Query {
                     $query->where = $query->having;
                 }
                 $query->having = null;
-            }
-
-            /*
-                есть группировка
-
-                select distinct
-                    id,
-                    t2.count
-                    t2.avg_count
-                from table
-
-                join (
-                    select
-                        group,
-                        count(*) `count`
-                    from table
-                    group by
-                        group
-                    limit 1,2
-                )t2
-                    on t2.group=table.group
-
-                join (
-                    select
-                        avg(`t2`.count)
-                    from (
-                        select
-                            count(*) `count`
-                        from table
-                        group by
-                            group
-                        limit 1,2
-                    )t2
-                )t3
-            */
-
-
-
+            }*/
         }
-
-
-        /*
-            каждый запрос может содержать функции разных уровней агрегатности
-
-            запросы, содержащие функции разных уровней агрегатности считаются невалидными
-
-            необходимо привести их к одному уровню
-
-            понятно, что уровень накапливается в зависимости от вложенности функции
-
-            следовательно в любом запросе будут присутсвовать все уровни агрегатности
-
-            подсчет стоит вести по тем переменным, которые должны быть извлечены
-
-            и по тем, которые сравниваются с родительскими условиями и могут попасть в "on"
-
-            при этом условия потециального having не обязательно должны оказаться в нем, так как вероятно их уровень модифицируется
-
-            вероятно придется изменить(упростить) алгоритм вычисления внешних условий по причине непринципиальности перенесения агрегатных функций
-
-            либо модифицировать:
-                разбирать условия нужно будет по трем типам
-                1) условия которые могут быть внутри запроса
-                2) условия, которые могут быть только вне запроса
-                3) агрегатные условия (желательно перенести вне, но можно оставить и в рамках запроса, если перерасчитать агрегатный уровень)
-
-        */
-        /*
-            извлекаемые переменные должны иметь один уровень агрегатности
-            извлекаемые переменные:
-                все что в селекте
-
-        */
     }
     public function analyze() {
         $this->calculatePathsVariables();
