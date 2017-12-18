@@ -433,7 +433,6 @@ final class SQL {
         return $result;
     }
     public function __invoke(Translater $sqlClass, \Closure $function = null) {
-        //если функци не передона, возвращаем текст запроса
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->union = [];
@@ -444,9 +443,11 @@ final class SQL {
         $this->getFields($structure, $query);
         $this->parseTreeFunctions($structure, ['orderby', 'groupby', 'insert', 'into', 'select', 'var', 'from', 'delete'], $query);
         unset($structure);
+        $query->analyze();
+        $request = $sqlClass->translate($query);
         if (is_null($function)) {
-            return $query->analyze();
+            return $request;
         }
-        return $this->createResult($function($query->analyze()), $select);
+        return $this->createResult($function($request), $select);
     }
 }

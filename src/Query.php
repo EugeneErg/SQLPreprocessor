@@ -51,6 +51,9 @@ final class Query {
             'select' => $this->select,
         ];
     }*/
+    public function selected(Field $field) {
+        return isset($this->select[$this->getFieldObjectHash($field->getObject())]);
+    }
     public function getInclude(Field $field) {
         if (is_array($object = $field->getObject())) {
             $object = $field;
@@ -139,41 +142,30 @@ final class Query {
         }
         return self::$queries[$branch][$context];
     }
-    /*public function field($field = null) {
-        if (is_null($field)) {
-            return $this->fields[];
-        }
-        if (isset($this->fields[$field])) {
-            return $this->fields[$field];
-        }
-    }*/
-    /*private function setFieldIndex($object) {
-        if ($object instanceof Variable) {
-            if (!isset($this->fields['Field ' . $object->getValue()])) {
-                $this->fields['Field ' . $object->getValue()] = count($this->fields);
-            }
-        }
-        elseif (!isset($this->fields['Variable ' . $object])) {
-            $this->fields['Variable ' . $object] = count($this->fields);
-        }
-    }*/
     private function getFieldObjectHash($object) {
         if (is_object($object)) {
             return spl_object_hash($object);
         }
         throw new \Exception('недопустимый тип объекта ' . getType($object));
     }
-    public function getField($object) {
+    public function getField($object, $createIfNotExist = true) {
         if (isset($this->include[$hash = $this->getFieldObjectHash($object)])) {
             return $this->include[$hash]->field;
         }
-        return Field::create($this, $object);
+        if ($createIfNotExist) {
+            return Field::create($this, $object);
+        }
+        return $object;
     }
     public function addNeed(Field $field, Query $query = null) {
         if (is_null($query)) {
             $query = $this;
         }
         if (!isset($this->include[$hash = $this->getFieldObjectHash($field->getObject())])) {
+
+            $index = count($this->fields);
+            $this->fields[$index] = $field;
+            $field->setAlias($this->index . '.' . $index);
             $this->include[$hash] = (object) [
                 'field' => $field,
             ];
@@ -230,7 +222,7 @@ final class Query {
     }
     public function addSelect(array $childs) {
         $field = $this->addField($childs);
-        return $this->select[spl_object_hash($field)] = $field;
+        return $this->select[$this->getFieldObjectHash($field->getObject())] = $field;
     }
     public function addOrder(array $childs, $asc = true) {
         $this->orders[] = (object) [
@@ -239,8 +231,9 @@ final class Query {
         ];
         return $field;
     }
-    public function addGroup(array $childs, $asc = true) {
-        return $this->orders[] = $this->addField($childs);
+    public function addGroup(array $childs) {
+        $this->isSubQuery = true;
+        return $this->groups[] = $this->addField($childs);
     }
     public function addIntoTable($table_name) {
         if (!is_scalar($table_name)) {
@@ -604,7 +597,7 @@ final class Query {
         $return = 0;
         foreach ($blocks as $block) {
             if (isset($blocks->next)) {
-                $return = conditionTypeBlockAnalyze([$block->next], $result) || $return;
+                $return = $this->conditionTypeBlockAnalyze([$block->next], $result) || $return;
             }
             $return = $this->conditionTypeFunctionsAnalyze($block->union, null, $result) || $return;
             foreach ($block->childs as $child) {
@@ -669,7 +662,7 @@ final class Query {
         elseif ($field->getType() == Field::TYPE_BLOCK) {
             $move = $result->move;
             $result->move = [];
-            if ($this->conditionTypeBlockAnalyze($field->getObject(), $result)) {
+            if ($this->conditionTypeBlockAnalyze((array) $field->getObject(), $result)) {
                 $result->move = array_merge($move, $result->move);
                 return $result->levels[$hash] = 1;
             }
@@ -723,8 +716,14 @@ final class Query {
         }
         return $result;
     }
-    private function addInclude(Field $field, Query $query) {
-        $level = ($query != $this) * (1 - 2 * isset($this->childs[$query->context]));
+    private function addInclude(Field $field, Query $query = null) {
+        if (is_null($query)) {
+            $query = $this;
+            $level = 0;
+        }
+        else {
+            $level = ($query != $this) * (1 - 2 * isset($this->childs[$query->context]));
+        }
         return $this->include[$this->getFieldObjectHash($field->getObject())] = (object) [
             'field' => $field,
             'query' => $query,
@@ -736,7 +735,7 @@ final class Query {
             $child->conditionAnalyze();
         }
         $object = $this->condition->getObject();
-        if (!isset($object['return'][0]->function)) {
+        if (!isset($object->return[0]->function)) {
             return;
         }
         if ($this->isCorrelate()) {
@@ -769,14 +768,14 @@ final class Query {
         }
         else {
             //получаем массив разделенных условий
-            $conditions = $this->conditionFunctionsAnalyze($object['return'][0]->function, $object['return'][0]->union);
+            $conditions = $this->conditionFunctionsAnalyze($object->return[0]->function, $object->return[0]->union);
             //необходим дополнительный анализ каждого элемента массива на принадлежность к текущему запросу, агрегатным функциям или родительскому запросу
             $conditions = $this->conditionTypesAnalyze($conditions);
         }
         if (!is_null($this->parent)) {
             foreach ($conditions->move as $field) {
                 $this->parent->addInclude($field, $this);
-                $this->select[spl_object_hash($field)] = $field;
+                $this->select[$this->getFieldObjectHash($field->getObject())] = $field;
             }
         }
         $this->where = $conditions->where;
@@ -842,7 +841,7 @@ final class Query {
             $cloneQuery->where = $this->where;
 
             foreach ($levels[1][1] as $field) {
-                $cloneQuery->select[spl_object_hash($field)] = $field;
+                $cloneQuery->select[$this->getFieldObjectHash($field->getObject())] = $field;
                 $cloneInclude = $cloneQuery->getInclude($field);
                 $cloneInclude->query = $cloneQuery;
 
@@ -867,76 +866,30 @@ final class Query {
                     $cloneQuery2 = $cloneQuery1->addClone($this);
                     $cloneQuery2->where = $this->where;
                     $cloneQuery2->on = $this->on;
-                    foreach ($levels[2] as $select) {
-                        if ($select->isAggregate()) {
-                            $fields = [$select];
-                        }
-                        else {
-                            $fields = $select->getAggregates();
-                        }
-                        foreach ($fields as $field) {
-                            $cloneQuery1->addSelect($field);
-                            $cloneQuery1->addInclude($field);
-                        }
+                    foreach ($levels[2][2] as $field) {
+                        $cloneQuery1->select[spl_object_hash($field)] = $field;
+                        $cloneQuery1->addInclude($field);
                     }
                 }
-                foreach ($moveLevels[2][1] as $field) {
+                foreach ($levels[2][1] as $field) {
                     $cloneQuery2->addSelect($field);
                     $cloneQuery1->addInclude($field, $cloneQuery2);
                 }
-
-                /*
-                    neq query {
-
-                        join(
-                            select
-                                avg(`t2`.count)
-                            from(
-                                select
-                                    count(*) `count`
-                                from table
-                                group by
-                                    group
-                                limit 1,2
-                            )t2
-                        )t3
-                    }
-                */
-/*
             }
-
-            if (isset($moveLevels[1])) {
-                /*
-                    join (
-                        select
-                            group,
-                            count(*) `count`
-                        from table
-                        group by
-                            group
-                        limit 1,2
-                    )t2
-                        on t2.group=table.group
-                */
-  /*              $cloneQuery = $query->addClone($query);
-                $cloneQuery->on = array();
-                /*
-                    добавляем в селект все переменные, а так же группировку
-
-                */
-    /*            foreach ($moveLevels[1][0] as $field) {
-                    $cloneQuery->addSelect($field);
-                    $cloneInclude = $cloneQuery->include($field);
+            if (isset($levels[1])) {
+                $cloneQuery = $this->addClone($this);
+                $cloneQuery->on = [];
+                foreach ($levels[1][1] as $field) {
+                    $cloneQuery->select[spl_object_hash($field)] = $field;
+                    $cloneInclude = $cloneQuery->getInclude($field);
                     $cloneInclude->query = $cloneQuery;
 
-                    $include = $query->include($field);
+                    $include = $this->getInclude($field);
                     $include->query = $cloneQuery;
                     $include->level = -1;
                 }
-                foreach ($query->groupby() as $field) {//группировка должна быть не перенесена а продублированна {on t2.group=table.group}
+                foreach ($this->groups as $field) {//группировка должна быть не перенесена а продублированна {on t2.group=table.group}
                     $cloneQuery->addSelect($field);
-
-
                     $hash = 'clone #' . count($field::fields($query));
                     $cloneField = $query->addField($hash, $field->type, $field->function);
                     $query->addInclude($cloneField);
@@ -1014,6 +967,6 @@ final class Query {
     public function analyze() {
         $this->calculatePathsVariables();
         $this->conditionAnalyze();
-        $this->aggregateLevelNormalization();
+ //       $this->aggregateLevelNormalization();
     }
 }

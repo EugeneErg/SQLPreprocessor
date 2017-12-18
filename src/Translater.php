@@ -42,13 +42,14 @@ abstract class Translater {
         extract($this->vars);
         extract($vars);
         ob_start();
-        require($this->getPath($path, '.php', null, '_'));
+        require($this->getPath($path, '.php', null));
         return ob_get_clean();
     }
     private function __construct() {
         $rClass = new \ReflectionClass($this);
-        $info = Self::pathinfo($rClass->getFileName());
-        $this->path = $info->dirname . '/' . mb_strtolower($info->basename);
+        $classPath = str_replace('\\', '/', $rClass->getFileName());
+        $info = Self::pathinfo($classPath);
+        $this->path = $info->dirname . mb_strtolower($info->basename);
     }
     final public static function instance() {
         static $instance = [];

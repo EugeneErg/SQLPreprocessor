@@ -52,4 +52,5 @@
             sql()->return($var1->id, $var2->type)
         };
 
-    $query(Translaters\MySql::instance());
+
+    die($query(Translaters\MySql::instance()));

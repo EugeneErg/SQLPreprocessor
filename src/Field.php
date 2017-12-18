@@ -12,6 +12,7 @@ final class Field {
     private $aggregates = [];
     private $isAggregate = false;
     private $type;
+    private $alias = 'not set alias';
 
 /*    public function __debugInfo() {
         return [
@@ -26,11 +27,11 @@ final class Field {
         $field = new Self();
 
         $contextFromObject = !count($functions);
-        if (!$contextFromObject
-            && !is_null($object)
-            && !$object instanceof Self
-        ) {
-            $object = $context->getField($object);
+        if (!is_array($object) && !is_null($object) && !$object instanceof Self) {
+            $object = $context->getField($object, !$contextFromObject);
+            if ($contextFromObject && $object instanceof Self) {
+                return $object;
+            }
         }
         if ($object instanceof Self) {
             $oContext = $object->getContext();
@@ -50,6 +51,7 @@ final class Field {
             $field->type = Self::TYPE_VARIABLE;
         }
         elseif (is_array($object)) {
+            $object = (object) $object;
             $oContext = $context;
             $field->type = Self::TYPE_BLOCK;
         }
@@ -155,5 +157,11 @@ final class Field {
     }
     public function getAggregates() {
         return $this->aggregates;
+    }
+    public function setAlias($alias) {
+        $this->alias = $alias;
+    }
+    public function __toString() {
+        return $this->alias;
     }
 }
