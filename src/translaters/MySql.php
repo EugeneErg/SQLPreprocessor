@@ -321,7 +321,7 @@ class MySql extends Translater {
                 $orders = [];
                 $this->type = self::PARENTFIELD;
                 foreach ($this->query->getOrders() as $order) {
-                    $orders[] = $this->getInclude($order->value) . ($order->asc ? '' : ' DESC');
+                    $orders[] = $this->getInclude($order->field) . ($order->asc ? '' : ' DESC');
                 }
                 $groups = array();
                 foreach ($this->query->getGroups() as $group) {

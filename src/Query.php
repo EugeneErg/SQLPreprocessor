@@ -194,7 +194,9 @@ final class Query {
         }
         else {
             $query->output[$this->context][$hash] = $field;
-            $query->select[$hash] = $field;
+            if ($this->parent !== $query) {
+                $query->select[$hash] = $field;
+            }
             if (!isset($query->include[$hash])) {//если его вообще ещё нет
                 $query->include[$hash] = (object) array (
                     'field' => $field,
@@ -238,6 +240,7 @@ final class Query {
                 case Argument::IS_SCALAR:
                     return $args[0]->getValue();
                 case Argument::IS_FIELD:
+                    $object = $args[0]->getValue();
                     break;
                 default:
                     throw new \Exception('Данный тип аргумента не может быть правильным ключем массива');
@@ -251,6 +254,7 @@ final class Query {
             'field' => $field = $this->addField($childs),
             'asc' => $asc,
         ];
+        $this->isSubQuery = true;
         return $field;
     }
     public function addGroup(array $childs) {
