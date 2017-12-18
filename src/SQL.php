@@ -166,22 +166,15 @@ final class SQL {
         $value->query = call_user_func_array(is_null($query) ? [Query::class, 'createDeleted'] : [$query, 'addDeleted'], $value->function->getValues());
     }
     private function selectStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $args = $value->function->getArgs();
-        if (!count($args)) {
-            $val = null;
+        $value->select = new \StdClass();
+        $hash = $value->select->key = $query->addSelect($value->function);
+        if (is_object($hash)) {
+            $hash = spl_object_hash($hash);
         }
-        elseif ($args[0]->getType() == 'NULL') {
-            $val = '';
-        }
-        else {
-            $val = $args[0]->getValue();
-        }
-        $hash = Self::getContext($val);
         if (isset($structure->select->childs[$hash])) {
             throw new \Exception('нельзя использовать одинаковые ключи для двух соседних селектов');
         }
-        $structure->select->childs[$hash] = $value->select = new \StdClass();
-        $value->select->key = $val;
+        $structure->select->childs[$hash] = $value->select;
         $value->select->childs = [];
         if (!isset($value->childs['select'])) {
             $value->select->result = $query->addSelect($value->childs);

@@ -48,7 +48,7 @@
                     ->and($var2->count(), '>', 4)
             ->endfrom
         }
-        ->select()->{
+        ->select($var2->test)->{
             sql()->return($var1->id, $var2->type)
         };
 

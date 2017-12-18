@@ -226,8 +226,24 @@ final class Query {
         }
         return $this->variable[$name] = $this->addField($childs);
     }
-    public function addSelect(array $childs) {
-        $field = $this->addField($childs);
+    public function addSelect($object) {
+        if ($object instanceof SQLFunction) {
+            $args = $object->getArgs();
+            if (!count($args)) {
+                return null;
+            }
+            switch ($args[0]->getType()) {
+                case Argument::IS_NULL:
+                    return '';
+                case Argument::IS_SCALAR:
+                    return $args[0]->getValue();
+                case Argument::IS_FIELD:
+                    break;
+                default:
+                    throw new \Exception('Данный тип аргумента не может быть правильным ключем массива');
+            }
+        }
+        $field = $this->addField($object);
         return $this->select[$this->getFieldObjectHash($field->getObject())] = $field;
     }
     public function addOrder(array $childs, $asc = true) {
