@@ -162,10 +162,6 @@ final class Query {
             $query = $this;
         }
         if (!isset($this->include[$hash = $this->getFieldObjectHash($field->getObject())])) {
-
-            $index = count($this->fields);
-            $this->fields[$index] = $field;
-            $field->setAlias($this->index . '.' . $index);
             $this->include[$hash] = (object) [
                 'field' => $field,
             ];
@@ -189,6 +185,11 @@ final class Query {
             }
             if (!isset($this->include[$hash]->level)) {
                 $this->include[$hash]->level = ($query !== $this) * (1 - 2 * isset($this->childs[$query->context]));//0 1 -1
+                if ($this->include[$hash]->level == 0) {
+                    $index = count($this->fields);
+                    $this->fields[$index] = $field;
+                    $field->setAlias($this->index . '.' . $index);
+                }
             }
         }
         else {
@@ -204,6 +205,11 @@ final class Query {
             }
             if (!isset($query->include[$hash]->level)) {
                 $query->include[$hash]->level = ($query !== $prevQuery) * (1 - 2 * ($prevQuery->parent === $query));
+                if ($query->include[$hash]->level == 0) {
+                    $index = count($query->fields);
+                    $query->fields[$index] = $field;
+                    $field->setAlias($query->index . '.' . $index);
+                }
             }
         }
         $this->include[$hash]->query = $query;

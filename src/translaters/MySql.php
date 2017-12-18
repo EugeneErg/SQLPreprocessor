@@ -193,11 +193,12 @@ class MySql extends Translater {
     private function getInclude($field) {
         $include = $this->query->getInclude($field);
 
-        /*if ($this->type == Self::PARENTFIELD
+        if ($this->type == Self::PARENTFIELD
             && $this->query->selected($include->field)
+                && $include->level !== 0
         ) {
-            return '`' . $include->query->getIndex() . '`.`' . ($include->level == 0 ? '' : $include->field . '`');
-        }*/
+            return '`' . $include->query->getIndex() . '`.`' . $include->field . '`';
+        }
         $alias = $this->type == Self::SELECT && !$this->query->isCorrelate() ? ' `' . $include->field . '`' : '';
 
         if ($include->level == 0
