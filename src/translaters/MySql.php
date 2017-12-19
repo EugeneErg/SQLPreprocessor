@@ -144,7 +144,14 @@ class MySql extends Translater {
             $objectValue = $this->getArgs($object->getArgs());
         }
         elseif ($object instanceof Field) {
-            $objectValue = $this->getInclude($object);
+            if ($object->getType() == Field::TYPE_VARIABLE
+                && $object->getObject()->getType() == Variable::IS_TABLE_NAME
+            ) {
+                $objectValue = null;
+            }
+            else {
+                $objectValue = $this->getInclude($object);
+            }
         }
         else {
             $objectValue = null;
@@ -154,7 +161,7 @@ class MySql extends Translater {
             if (!method_exists($this, "getFunction{$name}")) {
                 throw new \Exception('Данный метод неопределен');
             }
-            $objectValue = $this->{"getFunction{$name}"}($function, $objectValue);
+            $objectValue = $this->{"getFunction{$name}"}($function, $objectValue);//если функция вызывается от корня переменной, тут должен быть нулл
         }
         return $objectValue;
     }

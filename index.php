@@ -40,9 +40,6 @@
     $query =
         from($var1 = new Variable('tabel_name1'))->{
             from($var2 = new Variable('tabel_name2'))
-                ->groupBy
-                    ->return($var2->parent_id)
-                ->endGroupBy
                 ->return($var1->id, $var2->type)
                     ->and($var2->type->and(1)->and(0)->and(1), '&&', 3, '=', 1)
                     ->and($var2->count(), '>', 4)

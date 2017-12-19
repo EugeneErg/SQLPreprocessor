@@ -240,13 +240,15 @@ final class Query {
                 case Argument::IS_SCALAR:
                     return $args[0]->getValue();
                 case Argument::IS_FIELD:
-                    $object = $args[0]->getValue();
+                    $field = $args[0]->getValue();
                     break;
                 default:
                     throw new \Exception('Данный тип аргумента не может быть правильным ключем массива');
             }
         }
-        $field = $this->addField($object);
+        else {
+            $field = $this->addField($object);
+        }
         return $this->select[$this->getFieldObjectHash($field->getObject())] = $field;
     }
     public function addOrder(array $childs, $asc = true) {
@@ -864,7 +866,9 @@ final class Query {
         }
         if (!count($this->groups)) {
             $cloneQuery = $this->addClone($this);
+            $cloneQuery->select = [];
             $cloneQuery->where = $this->where;
+            $cloneQuery->on = [];
 
             foreach ($levels[1][1] as $field) {
                 $cloneQuery->select[$this->getFieldObjectHash($field->getObject())] = $field;
@@ -875,8 +879,7 @@ final class Query {
                 $include->query = $cloneQuery;
                 $include->level = -1;
             }
-            $this->where = array_merge($this->where, $this->on);
-            $this->on = [];
+            //$this->where = array_merge($this->where, $this->on);
         }
         else {
             /*if (isset($levels[2])) {//стоит выполнять вначале
@@ -993,6 +996,6 @@ final class Query {
     public function analyze() {
         $this->calculatePathsVariables();
         $this->conditionAnalyze();
- //       $this->aggregateLevelNormalization();
+        $this->aggregateLevelNormalization();
     }
 }
