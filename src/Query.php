@@ -867,9 +867,12 @@ final class Query {
         if (!count($this->groups)) {
             $cloneQuery = $this->addClone($this);
             $cloneQuery->select = [];
-            $cloneQuery->where = $this->where;
-            $cloneQuery->on = [];
-
+            if ($this->parent) {
+                $cloneQuery->on = [];
+            }
+            else {
+                $this->on = [];
+            }
             foreach ($levels[1][1] as $field) {
                 $cloneQuery->select[$this->getFieldObjectHash($field->getObject())] = $field;
                 $cloneInclude = $cloneQuery->getInclude($field);
@@ -879,7 +882,6 @@ final class Query {
                 $include->query = $cloneQuery;
                 $include->level = -1;
             }
-            //$this->where = array_merge($this->where, $this->on);
         }
         else {
             /*if (isset($levels[2])) {//стоит выполнять вначале

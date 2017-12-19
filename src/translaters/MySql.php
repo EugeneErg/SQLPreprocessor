@@ -342,11 +342,11 @@ class MySql extends Translater {
                     'where' => $query->getWhere(),
                     'orders' => $orders,
                     'groups' => $groups,
-                    'having' => $query->getHaving(),
+                    'having' => $query->getParent() ? [] : $query->getOn(),
                     'limit' => $query->getLimit(),
                     'ofset' => $query->getOffset(),
                     'alias' => $query->isCorrelate() || is_null($query->getParent()) ? null : $query->getIndex(),
-                    'on' => $query->getOn(),
+                    'on' => $query->getParent() ? $query->getOn() : [],
                 ]);
             }
             else {
