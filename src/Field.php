@@ -58,7 +58,7 @@ final class Field {
             $oContext = $context;
             $field->type = Self::TYPE_NULL;
         }
-        if (!isset($field->aggregateLevel)) {
+        if (!isset($field->aggregateLevel) && $field->type != Self::TYPE_BLOCK) {
             $field->aggregateLevel = 0;
         }
         $field->context = $contextFromObject ? $oContext : $context;
@@ -141,7 +141,7 @@ final class Field {
         return $level;
     }
     public function setAggregateLevel() {
-        if (is_null($this->aggregateLevel) && is_array($this->object)) {
+        if (is_null($this->aggregateLevel) && $this->type == Self::TYPE_BLOCK) {
             return $this->aggregateLevel = $this->getChildsAggregateLevel($this->object);
         }
     }
