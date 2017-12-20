@@ -12,7 +12,6 @@ final class Field {
     private $aggregates = [];
     private $isAggregate = false;
     private $type;
-    private $alias = 'not set alias';
 
 /*    public function __debugInfo() {
         return [
@@ -158,10 +157,7 @@ final class Field {
     public function getAggregates() {
         return $this->aggregates;
     }
-    public function setAlias($alias) {
-        $this->alias = $alias;
-    }
     public function __toString() {
-        return $this->alias;
+        return (string) $this->context->getAlias($this);
     }
 }

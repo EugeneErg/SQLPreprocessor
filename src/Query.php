@@ -38,6 +38,7 @@ final class Query {
     private $on = [];
     private $condition;
     private $intoTable;
+    private $aliases = [];
 
     private function __wakeup() {}
     private function __construct() {}
@@ -51,6 +52,19 @@ final class Query {
             'select' => $this->select,
         ];
     }*/
+    private function setAlias($hash) {
+        if (!isset($this->aliases[$hash])) {
+            $this->aliases[$hash] = count($this->aliases);
+        }
+        return $this->aliases[$hash];
+    }
+    public function getAlias(Field $field) {
+        $hash = $this->getFieldObjectHash($field->getObject());
+        if (isset($this->aliases[$hash])) {
+            return $this->index . '.' . $this->aliases[$hash];
+        }
+        return 'not set alias';
+    }
     public function selected(Field $field) {
         return isset($this->select[$this->getFieldObjectHash($field->getObject())]);
     }
@@ -188,7 +202,7 @@ final class Query {
                 if ($this->include[$hash]->level == 0) {
                     $index = count($this->fields);
                     $this->fields[$index] = $field;
-                    $field->setAlias($this->index . '.' . $index);
+                    $this->setAlias($hash);
                 }
             }
         }
@@ -210,7 +224,7 @@ final class Query {
                 if ($query->include[$hash]->level == 0) {
                     $index = count($query->fields);
                     $query->fields[$index] = $field;
-                    $field->setAlias($query->index . '.' . $index);
+                    $query->setAlias($hash);
                 }
             }
         }
@@ -884,6 +898,7 @@ final class Query {
             }
         }
         else {
+            return;
             /*if (isset($levels[2])) {//стоит выполнять вначале
                 //оптимизировать при отсутсвии 0 уровня
                 if (count($levels) == 1) {
@@ -906,9 +921,10 @@ final class Query {
                     $cloneQuery2->addSelect($field);
                     $cloneQuery1->addInclude($field, $cloneQuery2);
                 }
-            }
+            }*/
             if (isset($levels[1])) {
                 $cloneQuery = $this->addClone($this);
+                $cloneQuery->select = [];
                 $cloneQuery->on = [];
                 foreach ($levels[1][1] as $field) {
                     $cloneQuery->select[spl_object_hash($field)] = $field;
@@ -921,31 +937,19 @@ final class Query {
                 }
                 foreach ($this->groups as $field) {//группировка должна быть не перенесена а продублированна {on t2.group=table.group}
                     $cloneQuery->addSelect($field);
-                    $hash = 'clone #' . count($field::fields($query));
-                    $cloneField = $query->addField($hash, $field->type, $field->function);
-                    $query->addInclude($cloneField);
-                    $query->addInclude($field, $cloneQuery);
+                    $cloneField = $this->addField($field);
+                    $this->addInclude($cloneField, $cloneQuery);
 
-                    $cloneQuery->on[] = (object) array (
+                    $cloneQuery->on[] = (object) [
                         'not' => false,
-                        'args' => array (
-                            (object) array (
-                                'type' => 'uses',
-                                'value' => $field,
-                            ),
-                            (object) array (
-                                'type' => 'string',
-                                'value' => '=',
-                            ),
-                            (object) array (
-                                'type' => 'uses',
-                                'value' => $cloneField,
-                            )
-                        )
-                    );
+                        'args' => [
+                            new Argument($field),
+                            new Argument($cloneField),
+                        ]
+                    ];
                 }
             }
-            if (isset($moveLevels[2]) && count($moveLevels) != 1) {
+            /*if (isset($moveLevels[2]) && count($moveLevels) != 1) {
                 $query->moveToChild($cloneQuery1);
                 foreach ($moveLevels[2][0] as $field) {
                     $query->addInclude($field, $cloneQuery1);
