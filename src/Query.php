@@ -853,6 +853,25 @@ final class Query {
         }
         return $result;
     }
+    final public function moveToChild($query) {
+        if (!isset($query->parent)) {
+            unset(Self::$queries[$query->branch]);
+        }
+        else {
+            unset(Self::$queries[$query->branch][$query->context]);
+            unset($query->parent->childs[$query->context]);
+        }
+        //$query->context = 'clone #' . count(Self::$queries[$this->branch]);
+        //$query->index = count(Self::$queries[$this->branch]);
+        //$query->alias = $query->index;
+        Self::$queries[$this->branch][$query->context] = $query;
+        $query->branch = $this->branch;
+        $query->parent = $this;
+        foreach ($query->childs as $child) {
+            $query->moveToChild($child);
+        }
+        return $this->childs[$query->context] = $query;
+    }
     private function aggregateLevelNormalization() {
         foreach ($this->childs as $child) {
             $child->aggregateLevelNormalization();
@@ -898,36 +917,38 @@ final class Query {
             }
         }
         else {
-            return;
-            /*if (isset($levels[2])) {//стоит выполнять вначале
+            if (isset($levels[2])) {//стоит выполнять вначале
                 //оптимизировать при отсутсвии 0 уровня
                 if (count($levels) == 1) {
                     $cloneQuery1 = $this;
                     $cloneQuery2 = $this->addClone($this);
+                    $cloneQuery2->select = [];
                 }
                 else {
                     $newQuery = new Query();
                     $cloneQuery1 = $newQuery->addClone($this);
-                    $cloneQuery1->groupbyClear();
+                    $cloneQuery1->groups = [];
+                    $cloneQuery1->select = [];
                     $cloneQuery2 = $cloneQuery1->addClone($this);
-                    $cloneQuery2->where = $this->where;
-                    $cloneQuery2->on = $this->on;
+                    $cloneQuery1->where = [];
+                    $cloneQuery1->on = [];
                     foreach ($levels[2][2] as $field) {
-                        $cloneQuery1->select[spl_object_hash($field)] = $field;
+                        $cloneQuery1->select[$this->getFieldObjectHash($field->getObject())] = $field;
                         $cloneQuery1->addInclude($field);
                     }
                 }
                 foreach ($levels[2][1] as $field) {
-                    $cloneQuery2->addSelect($field);
+                    $cloneQuery2->select[$this->getFieldObjectHash($field->getObject())] = $field;
                     $cloneQuery1->addInclude($field, $cloneQuery2);
                 }
-            }*/
+            }
             if (isset($levels[1])) {
                 $cloneQuery = $this->addClone($this);
                 $cloneQuery->select = [];
                 $cloneQuery->on = [];
                 foreach ($levels[1][1] as $field) {
-                    $cloneQuery->select[spl_object_hash($field)] = $field;
+                    $cloneQuery->select[$this->getFieldObjectHash($field->getObject())] = $field;
+
                     $cloneInclude = $cloneQuery->getInclude($field);
                     $cloneInclude->query = $cloneQuery;
 
@@ -936,12 +957,15 @@ final class Query {
                     $include->level = -1;
                 }
                 foreach ($this->groups as $field) {//группировка должна быть не перенесена а продублированна {on t2.group=table.group}
-                    $cloneQuery->addSelect($field);
                     $cloneField = $this->addField($field);
                     $this->addInclude($cloneField, $cloneQuery);
+                    $cloneQuery->select[spl_object_hash($field)] = $cloneField;
+                    $cloneInclude = $cloneQuery->addInclude($cloneField);
+                    $cloneInclude->query = $cloneQuery;
 
                     $cloneQuery->on[] = (object) [
                         'not' => false,
+                        'type' => 'args',
                         'args' => [
                             new Argument($field),
                             new Argument($cloneField),
@@ -949,54 +973,18 @@ final class Query {
                     ];
                 }
             }
-            /*if (isset($moveLevels[2]) && count($moveLevels) != 1) {
-                $query->moveToChild($cloneQuery1);
-                foreach ($moveLevels[2][0] as $field) {
-                    $query->addInclude($field, $cloneQuery1);
+            if (isset($levels[2]) && count($levels) != 1) {
+                $this->moveToChild($cloneQuery1);
+                foreach ($levels[2][2] as $field) {
+                    $this->addInclude($field, $cloneQuery1);
                 }
             }
-            //$newQuery
-            /*
-                1) создаем новый запрос
-                2) копируем в него текущий запрос
-                3) переносим в селект скопированного запроса агрегаты второго уровня
-                4) переносим новый запрос в качестве дочернего запроса, в текущий запрос
-            */
-            /*
-                join(
-                    select
-                        avg(`t2`.count)
-                    from(
-                        select
-                            count(*) `count`
-                        from table
-                        group by
-                            group
-                        limit 1,2
-                    )t2
-                )t3
-            */
-      /*      $query->groupbyClear();
-            $query->distinct(true);
-            /*if (is_null($query->parent)) {
-                //die('необходимо проверить работоспособность инструкции');
-                if ($query->where) {
-                    $query->where += $query->on;
-                }
-                else {
-                    $query->where = $query->on;
-                }
-                $query->on = null;
-            }*/
-        /*    if ($query->having) {
-                if ($query->where) {
-                    $query->where += $query->having;
-                }
-                else {
-                    $query->where = $query->having;
-                }
-                $query->having = null;
-            }*/
+            $this->groups = [];
+            $this->distinct = true;
+            if (is_null($this->parent)) {
+                $this->where = array_merge($this->where, $this->on);
+                $this->on = [];
+            }
         }
     }
     public function analyze() {
