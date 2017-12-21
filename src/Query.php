@@ -41,7 +41,9 @@ final class Query {
     private $aliases = [];
 
     private function __wakeup() {}
-    private function __construct() {}
+    private function __construct() {
+        Self::$queries[$this->branch = count(Self::$queries)] = [];
+    }
     
     /*public function __debugInfo() {
         return [
@@ -100,8 +102,7 @@ final class Query {
         }
         $query = new Self();
         $query->context = spl_object_hash($var);
-        $query->branch = count(self::$queries);
-        self::$queries[$query->branch][$query->context] = $query;
+        Self::$queries[$query->branch][$query->context] = $query;
         $query->var = $var;
         $query->join = $join;
         $query->limit = $limit;
@@ -259,6 +260,9 @@ final class Query {
                 default:
                     throw new \Exception('Данный тип аргумента не может быть правильным ключем массива');
             }
+        }
+        elseif ($object instanceof Field) {
+            $field = $object;//прежде чем раскоментить, необходимо избавиться от лишних селектов при построении уровней
         }
         else {
             $field = $this->addField($object);
@@ -825,15 +829,11 @@ final class Query {
     }
     private function getLevelByField(Field $field, &$levels, $level) {
         if ($field->isAggregate()) {
-            $fields = [$field];
-        }
-        else {
-            $fields = $field->getAggregates();
-        }
-        foreach ($fields as $field) {
             $newLevel = $field->getAggregateLevel();
             $levels[$level][$newLevel][spl_object_hash($field)] = $field;
-            if ($level > 1) {
+        }
+        foreach ($field->getAggregates() as $field) {
+            if ($level > 0) {
                 $this->getLevelByField($field, $levels, $level);
             }
         }
@@ -841,11 +841,9 @@ final class Query {
     private function getAggregateLevels() {
         $result = [];
         foreach ($this->select as $select) {
-            if (0 === $level = $select->getAggregateLevel()) {
-                $result[0][0][spl_object_hash($select)] = $select;
-                continue;
-            }
-            if ($this->getInclude($select)->level != 0) {
+            if (0 === ($level = $select->getAggregateLevel())
+                || $this->getInclude($select)->level != 0
+            ) {
                 $result[0][0][spl_object_hash($select)] = $select;
                 continue;
             }
@@ -853,7 +851,7 @@ final class Query {
         }
         return $result;
     }
-    final public function moveToChild($query) {
+    final public function moveToChild(Self $query) {
         if (!isset($query->parent)) {
             unset(Self::$queries[$query->branch]);
         }
@@ -861,9 +859,11 @@ final class Query {
             unset(Self::$queries[$query->branch][$query->context]);
             unset($query->parent->childs[$query->context]);
         }
-        //$query->context = 'clone #' . count(Self::$queries[$this->branch]);
-        //$query->index = count(Self::$queries[$this->branch]);
-        //$query->alias = $query->index;
+        if (mb_substr($query->context, 0, 7) == 'clone #') {
+            $query->context = 'clone #' . count(Self::$queries[$this->branch]);
+        }
+        $query->index = count(Self::$queries[$this->branch]);
+        $query->alias = $query->index;
         Self::$queries[$this->branch][$query->context] = $query;
         $query->branch = $this->branch;
         $query->parent = $this;
@@ -930,6 +930,7 @@ final class Query {
                     $cloneQuery1->groups = [];
                     $cloneQuery1->select = [];
                     $cloneQuery2 = $cloneQuery1->addClone($this);
+                    $cloneQuery2->select = [];
                     $cloneQuery1->where = [];
                     $cloneQuery1->on = [];
                     foreach ($levels[2][2] as $field) {

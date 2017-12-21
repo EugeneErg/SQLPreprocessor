@@ -70,11 +70,11 @@ final class Field {
                 $field->aggregateLevel++;
                 $field->isAggregate = true;
                 if (count($functions) !== $pos + 1) {
-                    $field->functions = array_splice($functions, 0, $pos);
+                    $field->functions = array_splice($functions, 0, $pos + 1);
                     if (!is_array($object) && !is_null($object)) {
                         $context->addNeed($field, $oContext);
                     }
-                    return Self::create($context, $field, array_slice($functions, 0, $pos));
+                    return Self::create($context, $field, array_slice($functions, $pos));
                 }
             }
         }

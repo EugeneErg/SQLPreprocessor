@@ -139,6 +139,12 @@ class MySql extends Translater {
         }
         return "COUNT({$objectValue})";
     }
+    protected function getFunctionMax($function, $objectValue = null) {
+        return "MAX({$objectValue})";
+    }
+    protected function getFunctionResult($function, $objectValue = null) {
+
+    }
     protected function getFunctions(array $functions, $object) {
         if ($object instanceof SQLFunction) {
             $objectValue = $this->getArgs($object->getArgs());
