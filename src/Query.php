@@ -981,7 +981,7 @@ final class Query {
                 }
             }
             $this->groups = [];
-            $this->distinct = true;
+            $this->isDistinct = true;
             if (is_null($this->parent)) {
                 $this->where = array_merge($this->where, $this->on);
                 $this->on = [];
