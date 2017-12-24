@@ -40,14 +40,12 @@
     $query =
         from($var1 = new Variable('tabel_name1'))->{
             from($var2 = new Variable('tabel_name2'))
-                ->return($var1->id, $var2->type)
-                    ->and($var2->type->and(1)->and(0)->and(1), '&&', 3, '=', 1)
-                    ->and($var2->count(), '>', 4)
+                ->groupBy
+                    ->return($var2->type)
+                ->endGroupBy
             ->endfrom
         }
-        ->select($var2->test)->{
-            sql()->return($var1->id, $var2->type)
+        ->select($var2->count()->max()->or($var2->count))->{
+            sql()->return($var2->type->count())
         };
-
-
     die($query(Translaters\MySql::instance()));
