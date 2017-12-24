@@ -1,7 +1,7 @@
 {
     "name": "eugeneerg/sqlpreprocessor",
     "description": "sql preprocessor",
-    "version": "0.0.0",
+    "version": "0.0.1",
     "license": "MIT",
     "require": {
         "php": ">=5.6.0"
