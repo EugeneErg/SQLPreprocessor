@@ -12,7 +12,6 @@ final class Field {
     private $aggregates = [];
     private $isAggregate = false;
     private $type;
-    private $alias = 'not set alias';
 
 /*    public function __debugInfo() {
         return [
@@ -59,7 +58,7 @@ final class Field {
             $oContext = $context;
             $field->type = Self::TYPE_NULL;
         }
-        if (!isset($field->aggregateLevel)) {
+        if (!isset($field->aggregateLevel) && $field->type != Self::TYPE_BLOCK) {
             $field->aggregateLevel = 0;
         }
         $field->context = $contextFromObject ? $oContext : $context;
@@ -71,11 +70,11 @@ final class Field {
                 $field->aggregateLevel++;
                 $field->isAggregate = true;
                 if (count($functions) !== $pos + 1) {
-                    $field->functions = array_splice($functions, 0, $pos);
+                    $field->functions = array_splice($functions, 0, $pos + 1);
                     if (!is_array($object) && !is_null($object)) {
                         $context->addNeed($field, $oContext);
                     }
-                    return Self::create($context, $field, array_slice($functions, 0, $pos));
+                    return Self::create($context, $field, array_slice($functions, $pos));
                 }
             }
         }
@@ -142,7 +141,7 @@ final class Field {
         return $level;
     }
     public function setAggregateLevel() {
-        if (is_null($this->aggregateLevel) && is_array($this->object)) {
+        if (is_null($this->aggregateLevel) && $this->type == Self::TYPE_BLOCK) {
             return $this->aggregateLevel = $this->getChildsAggregateLevel($this->object);
         }
     }
@@ -158,10 +157,7 @@ final class Field {
     public function getAggregates() {
         return $this->aggregates;
     }
-    public function setAlias($alias) {
-        $this->alias = $alias;
-    }
     public function __toString() {
-        return $this->alias;
+        return (string) $this->context->getAlias($this);
     }
 }

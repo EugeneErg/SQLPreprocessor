@@ -133,11 +133,23 @@ class MySql extends Translater {
         }
         return "($objectValue))AND(({$this->getArgs($function->getArgs())})";
     }
+    protected function getFunctionReturn(SQLFunction$function, $objectValue = null) {
+        if (!is_null($objectValue)) {
+            throw new \Exception('Функция return должна вызываться от переменной таблицы');
+        }
+        return $this->getArgs($function->getArgs());
+    }
     protected function getFunctionCount($function, $objectValue = null) {
         if (is_null($objectValue)) {
             return 'COUNT(*)';
         }
         return "COUNT({$objectValue})";
+    }
+    protected function getFunctionMax($function, $objectValue = null) {
+        return "MAX({$objectValue})";
+    }
+    protected function getFunctionResult($function, $objectValue = null) {
+
     }
     protected function getFunctions(array $functions, $object) {
         if ($object instanceof SQLFunction) {
