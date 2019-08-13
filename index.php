@@ -36,16 +36,23 @@
     function _log($text) {
         echo $text . '<br>';
     }
-    
+
+    $var1 = new Variable('table_name1');
+    $var2 = new Variable('table_name2');
+
     $query =
-        from($var1 = new Variable('tabel_name1'))->{
-            from($var2 = new Variable('tabel_name2'))
-                ->groupBy
+        from($var1)->{
+            from($var2)
+                ->groupBy->{
+                    $var2->type
+                }
+                ->orderBy(true)
                     ->return($var2->type)
-                ->endGroupBy
+                ->endOrderBy
             ->endfrom
         }
         ->select($var2->count()->max()->or($var2->count))->{
-            sql()->return($var2->type->count())
+            $var2->type->count()
         };
+
     die($query(Translaters\MySql::instance()));

@@ -7,7 +7,8 @@ use EugeneErg\SQLPreprocessor\Field;
 use EugeneErg\SQLPreprocessor\Variable;
 use EugeneErg\SQLPreprocessor\Argument;
 
-class MySql extends Translater {
+class MySql extends Translater
+{
     const SELECT = 'select';
     const PARENTFIELD = 'parentfield';
     const CONDITION = 'condition';
@@ -15,13 +16,18 @@ class MySql extends Translater {
     protected $query;
     protected $type = Self::PARENTFIELD;
 
-    protected function quoteTable($name) {
-        return '`' . str_replace('`','``', $name) . '`';
+    protected function quoteTable($name)
+    {
+        return '`' . str_replace('`', '``', $name) . '`';
     }
-    protected function quoteStrring($string) {
-        return "'" . str_replace(array('\\',"'"), array('\\\\',"\\'"), $string) . "'";
+
+    protected function quoteString($string)
+    {
+        return "'" . str_replace(array('\\', "'"), array('\\\\', "\\'"), $string) . "'";
     }
-    protected function getTable() {
+
+    protected function getTable()
+    {
         $var = $this->query->getVar();
         switch ($var->getType()) {
             case Variable::IS_TABLE_NAME:
@@ -39,20 +45,22 @@ class MySql extends Translater {
                 $subSelects = [];
                 $subSelect = [];
                 foreach ($firstValues as $key => $value) {
-                    $subSelect[] = $this->quoteStrring($value) . ' ' . $this->quoteTable($value);
+                    $subSelect[] = $this->quoteString($value) . ' ' . $this->quoteTable($value);
                 }
                 $subSelects[] = implode(',', $subSelect);
                 foreach ($values as $value) {
                     $subSelect = [];
                     foreach ($value as $val) {
-                        $subSelect[] = $this->quoteStrring($val);
+                        $subSelect[] = $this->quoteString($val);
                     }
                     $subSelects[] = implode(',', $subSelect);
                 }
                 return '((SELECT ' . implode(')UNION ALL(SELECT ', $subSelects) . '))' . $this->quoteTable($this->query->getIndex());
         }
     }
-    protected function getChilds() {
+
+    protected function getChilds()
+    {
         $result = [];
         if (!$first = is_null($table = $this->getTable())) {
             $result[] = $table;
@@ -71,14 +79,18 @@ class MySql extends Translater {
         }
         return $result;
     }
-    protected function getArray(array $array) {
+
+    protected function getArray(array $array)
+    {
         $result = [];
         foreach ($array as $arg) {
             $result[] = $this->getArg($arg);
         }
         return $result;
     }
-    protected function getArg(Argument $arg) {
+
+    protected function getArg(Argument $arg)
+    {
         switch ($arg->getType()) {
             case Argument::IS_FIELD:
                 return $this->getInclude($arg->getValue());
@@ -88,12 +100,14 @@ class MySql extends Translater {
                 return 'NULL';
             case Argument::IS_SCALAR:
                 if (is_string($value = $arg->getValue())) {
-                    return $this->quoteStrring($value);
+                    return $this->quoteString($value);
                 }
                 return "$value";
         }
     }
-    protected function getArgs(array $args) {
+
+    protected function getArgs(array $args)
+    {
         /*
          * аргументы подготавливаются для функции типа IF RETURN
          * количество аргументов должно быть нечетным или равным 2-м
@@ -109,63 +123,72 @@ class MySql extends Translater {
         foreach ($args as $num => $arg) {
             if ($num % 2 == 0) {
                 $result .= $this->getArg($arg);
-            }
-            elseif (in_array($oper = mb_strtolower($arg->getValue()),
+            } elseif (in_array($oper = mb_strtolower($arg->getValue()),
                 ['=', '<', '>', '-', '+', '*', '/', '>=', '<=', '!=', '<>', '||', 'or', '&&', 'and'])
             ) {
                 $result .= ")$oper(";
-            }
-            else {
+            } else {
                 throw new \Exception('неожиданный оператор');
             }
         }
         return $result;
     }
-    protected function getFunctionOr(SQLFunction $function, $objectValue = null) {
+
+    protected function getFunctionOr(SQLFunction $function, $objectValue = null)
+    {
         if (is_null($objectValue)) {
             return $this->getArgs($function->getArgs());
         }
         return "($objectValue))OR(({$this->getArgs($function->getArgs())})";
     }
-    protected function getFunctionAnd(SQLFunction $function, $objectValue = null) {
+
+    protected function getFunctionAnd(SQLFunction $function, $objectValue = null)
+    {
         if (is_null($objectValue)) {
             return $this->getArgs($function->getArgs());
         }
         return "($objectValue))AND(({$this->getArgs($function->getArgs())})";
     }
-    protected function getFunctionReturn(SQLFunction$function, $objectValue = null) {
+
+    protected function getFunctionReturn(SQLFunction $function, $objectValue = null)
+    {
         if (!is_null($objectValue)) {
             throw new \Exception('Функция return должна вызываться от переменной таблицы');
         }
         return $this->getArgs($function->getArgs());
     }
-    protected function getFunctionCount($function, $objectValue = null) {
+
+    protected function getFunctionCount($function, $objectValue = null)
+    {
         if (is_null($objectValue)) {
             return 'COUNT(*)';
         }
         return "COUNT({$objectValue})";
     }
-    protected function getFunctionMax($function, $objectValue = null) {
+
+    protected function getFunctionMax($function, $objectValue = null)
+    {
         return "MAX({$objectValue})";
     }
-    protected function getFunctionResult($function, $objectValue = null) {
+
+    protected function getFunctionResult($function, $objectValue = null)
+    {
 
     }
-    protected function getFunctions(array $functions, $object) {
+
+    protected function getFunctions(array $functions, $object)
+    {
         if ($object instanceof SQLFunction) {
             $objectValue = $this->getArgs($object->getArgs());
-        }
-        elseif ($object instanceof Field) {
+        } elseif ($object instanceof Field) {
             if ($object->getType() == Field::TYPE_VARIABLE
                 && $object->getObject()->getType() == Variable::IS_TABLE_NAME
             ) {
                 $objectValue = null;
-            }
-            else {
+            } else {
                 $objectValue = $this->getInclude($object);
             }
-        }
-        else {
+        } else {
             $objectValue = null;
         }
         foreach ($functions as $function) {
@@ -177,7 +200,9 @@ class MySql extends Translater {
         }
         return $objectValue;
     }
-    protected function getBlock(array $block) {
+
+    protected function getBlock(array $block)
+    {
         foreach ($block as $name => $childs) {
             foreach ($childs as $child) {
                 if ($name == 'return') {
@@ -185,16 +210,14 @@ class MySql extends Translater {
                 }
                 if ($name == 'if') {
                     $result = "CASE WHEN({$this->getFunctions($child->union, $child->function)})THEN({$this->getBlock($child->childs)})";
-                }
-                else {
+                } else {
                     $result = "CASE({$this->getFunctions($child->union, $child->function)})";
                 }
                 while (isset($child->next)) {
                     $child = $child->next;
                     if (in_array($child->function->getName(), ['elseif', 'case'])) {
                         $result .= "WHEN({$this->getFunctions($child->union, $child->function)})THEN({$this->getBlock($child->childs)})";
-                    }
-                    else {
+                    } else {
                         $result .= "ELSE({$this->getBlock($child->childs)})";
                     }
                 }
@@ -202,19 +225,23 @@ class MySql extends Translater {
             }
         }
     }
-    protected function getParentInclude(\StdClass $include) {
+
+    protected function getParentInclude(\StdClass $include)
+    {
         $childQuery = $this->query;
         $this->query = $include->query;
         $result = $this->getInclude($include->field);
         $this->query = $childQuery;
         return $result;
     }
-    private function getInclude($field) {
+
+    private function getInclude($field)
+    {
         $include = $this->query->getInclude($field);
 
         if ($this->type == Self::PARENTFIELD
             && $this->query->selected($include->field)
-                && $include->level !== 0
+            && $include->level !== 0
         ) {
             return '`' . $include->query->getIndex() . '`.`' . $include->field . '`';
         }
@@ -257,10 +284,12 @@ class MySql extends Translater {
                 if ($include->query->isCorrelate()) {
                     return $this->getQuery($include->query, $include->field) . $alias;
                 }
-                return '`' . $include->query->getIndex() . '`.`' .$include->field . '`';
+                return '`' . $include->query->getIndex() . '`.`' . $include->field . '`';
         }
     }
-    protected function getQuery(Query $query, array $fields = null) {
+
+    protected function getQuery(Query $query, array $fields = null)
+    {
         $parentQuery = $this->query;
         $parentType = $this->type;
         $this->query = $query;
@@ -281,8 +310,7 @@ class MySql extends Translater {
                     'selects' => $selects,
                     'childs' => $this->getChilds(),
                 ]);
-            }
-            elseif (count($insert = $query->getInsert())) {
+            } elseif (count($insert = $query->getInsert())) {
                 $this->type = Self::CONDITION;
                 $selects = [];
                 $keys = [];
@@ -297,19 +325,17 @@ class MySql extends Translater {
                     'selects' => $selects,
                     'childs' => $this->getChilds(),
                 ]);
-            }
-            elseif (count($update = $query->getUpdate())) {
+            } elseif (count($update = $query->getUpdate())) {
                 $this->type = Self::CONDITION;
                 $updates = [];
-                foreach ($update as  $hash => $update) {
+                foreach ($update as $hash => $update) {
                     $updates[$hash] = $this->getInclude($update->key) . '=' . $this->getInclude($update->value);
                 }
                 $action = $this->makePartial('update', [
                     'childs' => $this->getChilds(),
                     'updates' => $updates,
                 ]);
-            }
-            elseif (count($delete = $query->getDelete())) {
+            } elseif (count($delete = $query->getDelete())) {
                 if (count($delete) > 1
                     && (!is_null($query->getLimit())
                         || count($query->getOrders())
@@ -360,12 +386,10 @@ class MySql extends Translater {
                     'alias' => $query->isCorrelate() || is_null($query->getParent()) ? null : $query->getIndex(),
                     'on' => $query->getParent() ? $query->getOn() : [],
                 ]);
-            }
-            else {
+            } else {
                 $result = null;
             }
-        }
-        else {
+        } else {
             $result = $this->getTable();
             if (count($on = $this->query->getOn())) {
                 $result .= ' ON ' . $this->getParentCondition($on);
@@ -375,7 +399,9 @@ class MySql extends Translater {
         $this->type = $parentType;
         return $result;
     }
-    protected function getCurentCondition(array $conditions) {
+
+    protected function getCurentCondition(array $conditions)
+    {
         $result = [];
         foreach ($conditions as $condition) {
             switch ($condition->type) {
@@ -387,14 +413,15 @@ class MySql extends Translater {
             }
             if ($condition->not) {
                 $result[] = "!({$value})";
-            }
-            else {
+            } else {
                 $result[] = "({$value})";
             }
         }
         return implode(')&&(', $result);
     }
-    protected function getParentCondition(array $conditions) {
+
+    protected function getParentCondition(array $conditions)
+    {
         $this->type = self::PARENTFIELD;
         $childQuery = $this->query;
         $this->query = $this->query->getParent();
