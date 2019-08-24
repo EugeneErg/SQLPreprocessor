@@ -1,9 +1,5 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
-<<<<<<< Updated upstream
-final class SQL {
-=======
-
 class SQL
 {
     use SequenceTrait;
@@ -12,243 +8,8 @@ class SQL
     const INSERT_TYPE = 'insert';
     const DELETE_TYPE = 'delete';
     const SELECT_TYPE = 'select';
->>>>>>> Stashed changes
 
     private $hash;
-<<<<<<< Updated upstream
-    private $fields = [];
-    
-    private function __clone() {}
-    private function __wakeup() {}
-
-    private function hashes($hash = null) {
-        static $hashes = [];
-        if (is_null($hash)) {
-            $hashes[$hash = spl_object_hash($this)] = $this;
-            return $hash;
-        }
-        if (isset($hashes[$hash])) {
-            return $hashes[$hash];
-        }
-    }
-    private function __construct() {
-        $this->hash = $this->hashes();
-    }
-    private static function structure() {
-        static $structure;
-        if (isset($structure)) {
-            return $structure;
-        }
-        $structure = new Structure();
-        $if = new Structure(1, 1, ['or', 'and']);
-            $else = new Structure();
-        $switch = new Structure(1, 1);
-            $case = new Structure(0, 0, ['or', 'and']);
-            $default = new Structure();
-        $select = new Structure(1);
-        $var = new Structure();
-        $from = new Structure();
-        $orderby = new Structure();
-        $groupby = new Structure();
-        $into = new Structure(1, 1);
-            $insert = new Structure();
-        $update = new Structure(1);
-        $delete = new Structure(1);
-        $return = new Structure(0, 1, ['or', 'and']);//ретерн не имеет дочерних блоков, поэтому не будет нуждаться в закрывающей функции
-
-        
-        //блок if
-        $if->addBlock('else', $else);
-        $if->addBlock('elseif', $if);
-        $if->addBlock('endif');
-        $else->addBlock('endif');
-        
-        
-        //блок switch
-        $switch->addBlock('case', $case);
-        $switch->addBlock('default', $default);
-        $case->addBlock('case', $case);
-        $case->addBlock('default', $default);
-        $case->addBlock('endswitch');
-        $default->addBlock('endswitch');
-        
-        
-        // блок from
-        foreach (['from', 'delete'] as $name) {
-            $$name->addChild('from', $from);
-            $$name->addChild('return', $return, 'return');
-            //$$name->addChild('if', $if, 'if');
-            //$$name->addChild('switch', $switch, 'switch');
-            $$name->addChild('var', $var);
-            $$name->addChild('groupby', $groupby);
-            $$name->addChild('orderby', $orderby);
-        }
-        
-        
-        // блок delete
-        $delete->addChild('delete', $delete);
-        
-        
-        //блок var if else case default orderby groupby update insert
-        foreach (['var', 'if', 'else', 'case', 'default', 'orderby', 'groupby', 'insert', 'update', 'select'] as $name) {
-            $$name->addChild('switch', $switch, 'switch');
-            $$name->addChild('if', $if, 'if');
-            $$name->addChild('return', $return, 'return');
-        }
-        
-        $var->addBlock('var', $var);
-        $var->addBlock('endvar');
-        
-        
-        $orderby->addBlock('orderby', $orderby);
-        $orderby->addBlock('endorderby');
-        
-        
-        $groupby->addBlock('groupby', $groupby);
-        $groupby->addBlock('endgroupby');
-        
-        
-        //блок select
-        $select->addChild('select', $select, 'select');
-        
-        
-        //блок into
-        $into->addBlock('insert', $insert);
-        $insert->addBlock('insert', $insert);
-        $insert->addBlock('endinto', $insert);
-        
-        $structure->addChild('from', $from, [], null, 1);
-        
-        $structure->addChild('select', $select, 'select');
-        $structure->addChild('into', $into, 'insert');
-        $structure->addChild('update', $update, 'update');
-        $structure->addChild('delete', $delete, 'delete', null, 1);
-        
-        return $structure;
-    }
-    public static function create(\Closure $function = null) {
-        $new = new Self();
-        if (is_null($function)
-            || $new === $result = $function($new)
-        ) {
-            return $new;
-        }
-        return $new->return($result);
-    }
-    public function __debugInfo() {
-        return [
-            'hash' => $this->hash,
-        ];
-    }
-    public function __call($name, $args) {
-        $this->functions[] = new SQLFunction($name, $args);
-        return $this;
-    }
-    public static function __callStatic($name, $args) {
-        $sql = new Self();
-        return $sql->__call($name, $args);
-    }
-    public function __get($name) {
-        if (!is_null($sql = $this->hashes($name))) {
-            $this->functions[] = &$sql->functions;
-            return $this;
-        }
-        return $this->__call($name, []);
-    }
-    public function __toString() {
-        return $this->hash;
-    }
-    private static function getContext($context) {
-        switch(getType($context)) {
-            case 'object':
-                return spl_object_hash($context);
-            case 'NULL':
-                return 'NULL';
-            default:
-                if (is_scalar($context)) {
-                    return 'SCALAR ' . $context;
-                }
-                throw new \Exception('неизвестный тип переменной ' . print_r($context,true));
-        }
-    }
-    private function fromStructureValidation(\StdClass $value, Query $query = null) {
-        $value->query = call_user_func_array(is_null($query) ? [Query::class, 'create'] : [$query, 'addChild'], $value->function->getValues());
-    }
-    private function deleteStructureValidation(\StdClass $value, Query $query = null) {
-        $value->query = call_user_func_array(is_null($query) ? [Query::class, 'createDeleted'] : [$query, 'addDeleted'], $value->function->getValues());
-    }
-    private function selectStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $value->select = new \StdClass();
-        $hash = $value->select->key = $query->addSelect($value->function);
-        if (is_object($hash)) {
-            $hash = spl_object_hash($hash);
-        }
-        if (isset($structure->select->childs[$hash])) {
-            throw new \Exception('нельзя использовать одинаковые ключи для двух соседних селектов');
-        }
-        $structure->select->childs[$hash] = $value->select;
-        $value->select->childs = [];
-        if (!isset($value->childs['select'])) {
-            $value->select->result = $query->addSelect($value->childs);
-        }
-    }
-    private function varStructureValidation(\StdClass $value, Query $query) {
-        $args = $value->function->getArgs();
-        if (!count($args) || $args[0]->getType() != 'scalar') {
-            throw new \Exception('неправильный тип аргумента');
-        }
-        $query->addVariable($value->childs, $args[0]->getValue());
-        if (isset($value->next)) {
-            $this->varStructureValidation($value->next, $query);
-        }
-    }
-    private function varStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {}
-    private function fromStructureParentValidation(\StdClass $value, \StdClass $structure = null, Query $query) {
-        $moveChilds = $value->childs;
-        unset($moveChilds['from']);
-        unset($moveChilds['delete']);
-        $value->query->addConditions($moveChilds);
-    }
-    private function deleteStructureParentValidation(\StdClass $value, \StdClass $structure = null, Query $query) {
-        $this->fromStructureParentValidation($value, $structure, $query);
-    }
-    private function orderbyStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $args = $value->function->getArgs();
-        $query->addOrder($value->childs, !count($args) || !empty($args[0]->getValue()));
-        if (isset($value->next)) {
-            $this->orderbyStructureParentValidation($value->next, $structure, $query);
-        }
-    }
-    private function groupbyStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $query->addGroup($value->childs);
-        if (isset($value->next)) {
-            $this->groupbyStructureParentValidation($value->next, $structure, $query);
-        }
-    }
-    private function updateStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $args = $value->function->getArgs();
-        if (!count($args)) {
-            throw new \Exception('неправильный тип аргумента');
-        }
-        $query->addUpdate($value->childs, $args[0]->getValue());
-        if (isset($value->next)) {
-            $this->updateStructureParentValidation($value->next, $structure, $query);
-        }
-    }
-    private function intoStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $args = $value->function->getArgs();
-        $query->addIntoTable($args[0]->getValue());
-    }
-    private function insertStructureParentValidation(\StdClass $value, \StdClass $structure, Query $query) {
-        $args = $value->function->getArgs();
-        $query->addInsert($value->childs, $args[0]->getValue());
-        if (isset($value->next)) {
-            $this->insertStructureParentValidation($value->next, $structure, $query);
-        }
-    }
-    private function getQueryTree(\StdClass $structure, array $keys) {
-        $query = null;
-=======
     private $topology;
 
     protected $structure = [
@@ -305,7 +66,6 @@ class SQL
     private function getQuestionType()
     {
         static $root;
->>>>>>> Stashed changes
         $result = null;
         if (!$root) {
             $default = new Structure(function(Structure $default) {
@@ -427,178 +187,6 @@ class SQL
         $root($this->getStructure());
         return $result;
     }
-<<<<<<< Updated upstream
-    final private function getQueryInfo(Self $fQuery, Query $query) {
-        /*
-            $var->id->function() => SQL::from($var, $var->id)->function()
-            $var('id')->function() => SQL::from($var, 'id')->function()
-            $var($var2->id)->function() => SQL::from($var, $var2->id)->function()
-            $var($var2('id'))->function => SQL::from($var, SQL::from($var2, 'id'))->function()
-            SQL::from('id')
-            SQL::from($var->id)
-        */
-        if (!count($fQuery->functions)) {
-            throw new \Exception('аргументом не может быть пустой запрос');
-        }
-        if ($fQuery->functions[0]->getName() != 'from') {
-            return $query->addField(null, $fQuery->functions);
-        }
-        $from = array_shift($fQuery->functions);
-        $args = $from->getArgs();
-        $context = $query;
-        switch (count($args)) {
-            case 0:
-                return $this->getQueryInfo($fQuery, $query);
-            case 2:
-            default:
-                if ($args[0]->getType() != Argument::IS_VARIABLE) {
-                    throw new \Exception('Первым параметром ожидается объект переменной');
-                }
-                $context = $query->find($args[0]->getValue());
-                $args[0] = $args[1];
-            case 1:
-                $value = $args[0]->getValue();
-                switch ($args[0]->getType()) {
-                    case Argument::IS_FUNCTION:
-                        $this->getUseArgumentArgs($args[0], $context);
-                        $value = $args[0]->getValue();
-                        break;
-                    case Argument::IS_SCALAR:
-                        $value = $context->getVariable($value);
-                        if (is_null($value->getAggregateLevel())) {
-                            $this->getUseChilds($value->getObject(), $context);
-                            $value->setAggregateLevel();
-                        }
-                        break;
-                    case Argument::IS_VARIABLE:
-                        $vContext = $query->find($value);
-                        if ($vContext !== $context) {
-                            $value = $context->addField($value);
-                        }
-                        break;
-                    default:
-                        throw new \Exception('Неправильный тип аргумента');
-                }
-                $field = $context->addField($value, $fQuery->functions);
-                $this->getUseFunctions($fQuery->functions, $context);//необходимо вычислять агрегатные уровни функций в объявленном контектсе
-                if ($context !== $query) {
-                    return $query->addField($field);
-                }
-                return $field;
-        }
-    }
-    private function getUseArgumentArgs(Argument $argument, Query $query) {
-        $level = 0;
-        if (Argument::IS_ARRAY == $type = $argument->getType()) {
-            foreach ($argument->getValue() as $arg) {
-                $level = max($level, $this->getUseArgumentArgs($arg, $query));
-            }
-        }
-        elseif ($type == Argument::IS_VARIABLE) {
-            $argument->setValue($query->addField($argument->getValue()));
-        }
-        elseif ($type == Argument::IS_FUNCTION) {
-            $field = $this->getQueryInfo($argument->getValue(), $query);
-            $argument->setValue($field);
-            $level = max($level, $field->getAggregateLevel());
-        }
-        return $level;
-    }
-    private function getUseFunctionArgs(SQLFunction $function, Query $query) {
-        foreach ($function->getArgs() as $arg) {
-            $this->getUseArgumentArgs($arg, $query);
-        }
-    }
-    private function getUseFunctions(array $functions, Query $query) {
-        foreach ($functions as $function) {
-            $this->getUseFunctionArgs($function, $query);
-        }
-    }
-    private function getUseChilds(array $childs, Query $query) {
-        foreach ($childs as $key => $values) {
-            foreach ($values as $value) {
-                $this->getFields($value, $query);
-            }
-        }
-    }
-    private function getFields(\StdClass $structure, Query $query) {
-        if (isset($structure->query)) {
-            $query = $structure->query;
-        }
-        elseif (isset($structure->function)) {
-            $this->getUseFunctionArgs($structure->function, $query);
-        }
-        $this->getUseChilds($structure->childs, $query);
-        $this->getUseFunctions($structure->union, $query);
-        if (isset($structure->next)) {
-            $this->getFields($structure->next, $query);
-        }
-    }
-    private function tryMoveFirstChildQueryToRoot(\StdClass $structure) {
-        if ($structure->query === $newFirstQuery = $structure->query->setOneChildAsRoot()) {
-            return $structure;
-        }
-        foreach ($structure->childs['from'] as $num => $child) {
-            if (isset($child->query) && $child->query === $newFirstQuery) {
-                unset($structure->childs['from'][$num]);
-                $child->childs = array_merge_recursive($structure->childs, $child->childs);
-                return $child;
-            }
-        }
-        return $structure;
-    }
-    private function parseTreeFunctions(\StdClass $structure, array $keys, Query $query) {
-        if (isset($structure->query)) {
-            $query = $structure->query;
-        }
-        foreach ($structure->childs as $key => $values) {
-            $is_inarray = in_array($key, $keys);
-            foreach ($values as $value) {
-                $this->parseTreeFunctions($value, $keys, $query);
-                if ($is_inarray) {
-                    $this->{"{$key}StructureParentValidation"}($value, $structure, $query);
-                }
-            }
-            if ($is_inarray) {
-                unset($structure->childs[$key]);
-            }
-        }
-    }
-    private function createSelectObject($select, $row, &$prev) {
-        if (is_null($prev)) {
-            $prev = array();
-        }
-        if (is_null($select->key)) {
-            $prev[] = null;
-            end($prev);
-            $key = key($prev);
-        }
-        elseif (is_scalar($select->key)) {
-            $key = $select->key;
-        }
-        else {
-            $key = $row[$select->key->context];
-        }
-        if (isset($select->value)) {
-            $prev[$key] = $row[$select->value->context];
-        }
-        else {
-            foreach ($select->childs as $child) {
-                $this->createSelectObject($child, $row, $prev[$key]);
-            }
-        }
-    }
-    private function createResult($res, \StdClass $select) {
-        $result = null;
-        foreach ($res as $row) {
-            foreach ($select->childs as $child) {
-                $this->createSelectObject($child, $row, $result);
-            }
-        }
-        return $result;
-    }
-    public function __invoke(Translater $sqlClass, \Closure $function = null) {
-=======
 
     public function __invoke(Translater $sqlClass, \Closure $function = null)
     {
@@ -607,7 +195,6 @@ class SQL
 
 
 
->>>>>>> Stashed changes
         $structure = new \StdClass();
         $structure->childs = Self::structure()->validation($this->functions, $levels);
         $structure->union = [];
@@ -625,4 +212,317 @@ class SQL
         }
         return $this->createResult($function($request), $select);
     }
+
+
+
+    /**
+     * @param string $context
+     * @param array $structure
+     * @return object[][]
+     */
+    private function explode($context, array $structure)
+    {
+        $result = [];
+        $value = [];
+        foreach ($structure as $item) {
+            if ($item->type !== self::CONTEXT_TYPE
+                || $item->value !== $context
+            ) {
+                $value[] = $item;
+            }
+            else {
+                $result[] = $value;
+                $value = [];
+            }
+        }
+        if (count($value)) {
+            $result[] = $value;
+        }
+        return $result;
+    }
+
+    /**
+     * @param array $structure
+     * @return string
+     */
+    private function getStringKey(array $structure)
+    {
+        $result = '';
+        foreach ($structure as $item) {
+            switch ($item->type) {
+                case self::STRING_TYPE:
+                case self::NUMBER_TYPE:
+                case self::WORD_TYPE:
+                    $result .= " $item->value";
+                    break;
+                case self::PARENTHESIS_TYPE:
+                    $result .= "({$this->getStringKey($item->value)})";
+                    break;
+                case self::RECTANGULAR_TYPE:
+                    $result .= "[{$this->getStringKey($item->value)}]";
+                    break;
+                case self::CONTEXT_TYPE:
+                case self::METHOD_TYPE:
+                    $result .= $item->value;
+                    break;
+                case self::SQLVAR_TYPE:
+                    $result .= "@$item->value";
+                    break;
+                case self::FIELD_TYPE:
+                    if ($item->value[0] === '.') {
+                        $result .= '.' . str_replace('``', '`', substr($item->value, 2, -1));
+                    }
+                    else {
+                        $result .= ' ' . str_replace('``', '`', $item->value);
+                    }
+                    break;
+                case self::VARIABLE_TYPE:
+                    // TODO
+            }
+        }
+        return $result;
+    }
+
+    private function getFromBlock(array $structure)
+    {
+
+    }
+
+    private function getCorrelateBlock(array $structure)
+    {
+        return $this->getFromBlock($structure);
+    }
+
+    private function getRightjoinBlock(array $structure)
+    {
+        return $this->getFromBlock($structure);
+    }
+
+    private function getLeftjoinBlock(array $structure)
+    {
+        return $this->getFromBlock($structure);
+    }
+
+    private function getJoinBlock(array $structure)
+    {
+        return $this->getFromBlock($structure);
+    }
+
+    /**
+     * @param array $structure
+     * @return object[]
+     * @throws \Exception
+     */
+    private function getSelectBlock(array $structure)
+    {
+        /*
+         * string, context, sql_var, sql_method, number, variable, field, method
+         * con
+         * */
+        // селект это набор аргументов, переданных через запятую
+        /*
+         * SELECT
+         * [//инкрементный ключ, а значит правила для каждой строки
+             * field_1,//название поля - ключ, значение пол - значение
+             * field2: field4, //значение одного поля - ключ, значение второго - значение
+             * "string": field5,//строка - ключ, значение поля - значение
+             * 'string' field_6,//ключ значение можно без двоеточия
+             * `string` field7,//в данном случае ключ-строка string
+             * field3 [//ключ - значение поля, а значение - массив с теми же правилами
+             *   value1, `q`: value2, `q2` value3
+             * ],
+             * [//инкрементный ключ у массива можно без двоеточия
+             *   value1, `q`: value2, `q2` value3
+             * ],
+         *   * : field8//инкрементный ключ, значение поля 8
+         *]
+         *
+         * что делать с этим
+         * [
+         *  (q ? 1 : 0): field1
+         *]
+         * */
+        /*
+         * 1) разделяем на части, запятыми
+         *    2.1) если часть - массив, то ключ инкремент, а значение - массив, анализируем
+         *    2.2) если в части есть двоеточие, всё, что после двоеточия - значение, если есть до - ключ, иначе инкремент
+         *    2.3) если нет двоеточия
+         *       2.3.1) если после(круглых скобок, метода, поля, переменной, квадратных скобок, строки) нет (метода, котекста, квадратных скобок)
+         *          то считаем, между ними разделитель и левая часть - ключ, правая - значение
+         *
+         * */
+        $structure = $this->explode(',', $structure);
+        $result = [];
+        foreach ($structure as $value) {
+            $keyValue = $this->explode(':', $value);
+            switch (count($keyValue)) {
+                case 0:
+                    break;
+                case 1:
+                    if (count($keyValue[0])) {
+                        if ($keyValue[0][0]->type === self::RECTANGULAR_TYPE) {
+                            if (count($keyValue[0]) > 1) {
+                                throw new \Exception('');
+                            }
+                            $value = $this->getSelectBlock($keyValue[1]);
+                            $key = null;
+                        }
+                        else {
+                            $value = $keyValue[0];
+                            $key = [
+                                (object) [
+                                    'type' => self::STRING_TYPE,
+                                    'value' => $this->getStringKey($value)
+                                ]
+                            ];
+                        }
+                        $result[] = (object) [
+                            'key' => $key,
+                            'value' => $value
+                        ];
+                    }
+                    break;
+                case 2:
+                    if (!count($keyValue[1])) {
+                        $value = null;
+                    }
+                    elseif ($keyValue[1][0]->type === self::RECTANGULAR_TYPE) {
+                        if (count($keyValue[1]) > 1) {
+                            throw new \Exception('');
+                        }
+                        $value = $this->getSelectBlock($keyValue[1]);
+                    }
+                    else {
+                        $value = $keyValue[1];
+                    }
+                    if ($value !== null || count($keyValue[0])) {
+                        $result[] = (object) [
+                            'key' => count($keyValue[0]) ? $keyValue[0] : null,
+                            'value' => $value
+                        ];
+                    }
+                    break;
+                default:
+                    throw new \Exception('');
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * @param string $type
+     * @param array $structure
+     *
+     * @return object[]
+     */
+    private function getBlock($type, array $structure)
+    {
+        return call_user_func([$this, 'get' . ucfirst($type) . 'Block'], $structure);
+    }
+
+    /**
+     * @param array $structure
+     * @param int $pos
+     * @return object|null
+     * @throws \Exception
+     */
+    private function getNextBlock(array $structure, &$pos = 0)
+    {
+        if (!isset($structure[$pos])) {
+            return null;
+        }
+        $first = $structure[$pos];
+        if ($first->type !== self::WORD_TYPE) {
+            throw new \Exception('');
+        }
+        $types = self::getPartsBlockTypes();
+        if (!isset($types[$first->value])) {
+            throw new \Exception('');
+        }
+        $type = $first->value . implode('', $types[$first->value]);
+        $pos++;
+        foreach ($types[$first->value] as $num => $part) {
+            if (!isset($structure[$pos])) {
+                return null;
+            }
+            if ($structure[$pos]->type !== self::WORD_TYPE
+                || $structure[$pos]->value !== $part
+            ) {
+                break;
+            }
+            $pos++;
+        }
+        $subStructure = [];
+        for (; $pos < count($structure); $pos++) {
+            if ($structure[$pos]->type === self::WORD_TYPE
+                && isset($types[$structure[$pos]->value])
+            ) {
+                return (object)[
+                    'type' => $type,
+                    'value' => $this->getBlock($type, $subStructure)
+                ];
+            }
+            $subStructure[] = $structure[$pos];
+        }
+        return (object)[
+            'type' => $type,
+            'value' => $this->getBlock($type, $subStructure)
+        ];
+    }
+
+    private static function getPartsBlockTypes()
+    {
+        static $result;
+        if (!$result) {
+            $blockTypes = [
+                'from', 'join', 'left join', 'right join', 'correlate',
+                'select', 'update', 'delete', 'insert',
+                'where', 'having', 'on',
+                'order by', 'group by',
+            ];
+            $result = [];
+            foreach ($blockTypes as $type) {
+                $parts = explode(' ', $type);
+                $key = array_shift($parts);
+                $partsBlockTypes[$key] = $parts;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * @param array $structure
+     * @return object[]
+     * @throws \Exception
+     */
+    private function analyzeQuery(array $structure)
+    {
+        $blocks = [];
+        while ($block = $this->getNextBlock($structure, $pos)) {
+            $blocks[] = $block;
+        }
+        return $blocks;
+    }
+
+    private function analyzeSubQuery(array $structure)
+    {
+
+    }
+
+    private function analyzeArgument(array $structure)
+    {
+        /*
+         * наличие:
+         *  логические операторы
+         *  алгебраические операторы
+         *  методы и слова(методы sql)
+         *  переменные и переменные sql
+         *
+         *
+         *
+         *
+         *
+         * */
+    }
+
 }
