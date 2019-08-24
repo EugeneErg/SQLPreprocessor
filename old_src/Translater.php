@@ -6,7 +6,7 @@ abstract class Translater {
     private $path;
     private $blocks = [];
 
-    abstract protected function getQuery(Query $query, array $fields = null);
+    abstract protected function getQuery(Raw $query, array $fields = null);
 
     final private static function pathinfo($path) {
         $r = new \StdClass();
@@ -58,7 +58,7 @@ abstract class Translater {
         }
         return $instance[$class];
     }
-    final public function translate(Query $query) {
+    final public function translate(Raw $query) {
         return $this->getQuery($query);
     }
 }

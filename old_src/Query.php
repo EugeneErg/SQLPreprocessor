@@ -172,7 +172,7 @@ final class Query {
         }
         return $object;
     }
-    public function addNeed(Field $field, Query $query = null) {
+    public function addNeed(Field $field, Raw $query = null) {
         if (is_null($query)) {
             $query = $this;
         }
@@ -323,7 +323,7 @@ final class Query {
         }
         return $query;
     }
-    private function checkContext(Query $dest, $isMultiCorrelate = false) {
+    private function checkContext(Raw $dest, $isMultiCorrelate = false) {
         if ($dest === $src = $this) {
             return null;
         }
@@ -385,7 +385,7 @@ final class Query {
         $this->childs = [];
         $this->include = [];
     }
-    final public function addClone(Query $srcQuery) {
+    final public function addClone(Raw $srcQuery) {
         $query = clone $srcQuery;
         $query->alias = $query->index = count(Self::$queries[$this->branch]);
         $query->context = 'clone #' . $query->index;
@@ -762,7 +762,7 @@ final class Query {
         }
         return $result;
     }
-    private function addInclude(Field $field, Query $query = null) {
+    private function addInclude(Field $field, Raw $query = null) {
         if (is_null($query)) {
             $query = $this;
             $level = 0;
@@ -925,7 +925,7 @@ final class Query {
                     $cloneQuery2->select = [];
                 }
                 else {
-                    $newQuery = new Query();
+                    $newQuery = new Raw();
                     $cloneQuery1 = $newQuery->addClone($this);
                     $cloneQuery1->groups = [];
                     $cloneQuery1->select = [];

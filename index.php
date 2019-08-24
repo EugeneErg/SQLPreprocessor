@@ -6,7 +6,7 @@
     use EugeneErg\SQLPreprocessor\Variable;
     use EugeneErg\SQLPreprocessor\Translaters;
     use EugeneErg\SQLPreprocessor\SQL;
-    use EugeneErg\SQLPreprocessor\Query;
+    use EugeneErg\SQLPreprocessor\Raw;
     
     function dd() {
         $res = '<? ';

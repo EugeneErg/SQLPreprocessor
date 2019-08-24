@@ -22,7 +22,7 @@ final class Field {
         ];
     }*/
     private function __construct() {}
-    public static function create(Query $context, $object = null, array $functions = []) {
+    public static function create(Raw $context, $object = null, array $functions = []) {
         $field = new Self();
 
         $contextFromObject = !count($functions);

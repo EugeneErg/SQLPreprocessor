@@ -1,5 +1,6 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+<<<<<<< Updated upstream
 final class Variable {
 	const IS_TABLE_CONTENT = 'content';
 	const IS_TABLE_NAME = 'name';
@@ -137,5 +138,78 @@ final class Variable {
 			return SQL::from($variable);
 		}
         return SQL::from($context, $variable);
+=======
+class Variable implements \ArrayAccess
+{
+    use SequenceTrait {
+        __construct as private generateHash;
+    }
+
+    private $value;
+
+    /**
+     * @param string|int $offset
+     * @return bool|void
+     * @throws \Exception
+     */
+    public function offsetExists($offset)
+    {
+        throw new \Exception('not access method');
+    }
+
+    /**
+     * @param mixed $offset
+     * @return mixed|void
+     * @throws \Exception
+     */
+    public function offsetGet($offset)
+    {
+        return $this->__get($offset);
+    }
+
+    /**
+     * @param string|int $offset
+     * @param mixed $value
+     * @throws \Exception
+     */
+    public function offsetSet($offset, $value)
+    {
+        throw new \Exception('not access method');
+    }
+
+    /**
+     * @param string|int $offset
+     * @throws \Exception
+     */
+    public function offsetUnset($offset)
+    {
+        throw new \Exception('not access method');
+    }
+
+    /**
+     * Variable constructor.
+     * @param string|array|null $value
+     * @param array $keys
+     */
+    public function __construct($value = null, array $keys = [])
+    {
+        $this->generateHash();
+
+        $this->value = $value;
+        if (is_string($value)) {
+
+        }
+        elseif (is_null($value)) {
+
+        }
+        elseif (is_array($value)) {
+
+        }
+    }
+
+    public function __invoke()
+    {
+        // TODO: Implement __invoke() method.
+>>>>>>> Stashed changes
     }
 }
