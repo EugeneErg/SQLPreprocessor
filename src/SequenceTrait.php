@@ -6,12 +6,29 @@
  */
 trait SequenceTrait
 {
-    private $hash;
+    use HashesTrait;
+
     private $sequence = [];
-    protected $structure = [];
-    protected $otherSequenceName = null;
-    protected $createdAsNew = false;
-    protected $parameterAsFunction = true;
+    private $structure = [];
+    private $otherSequenceName = null;
+
+    /**
+     * @param string $name
+     * @param array $args
+     * @param bool $is_method
+     * @throws \Exception
+     */
+    private function addBlock($name, array $args, $is_method = true)
+    {
+        if (!isset($this->sequence[$name])) {
+            throw new \Exception('invalid sequence');
+        }
+        $this->structure[] = (object) [
+            'name' => $name,
+            'options' => $args,
+            'is_method' => $is_method,
+        ];
+    }
 
     /**
      * @param string $name
@@ -19,16 +36,9 @@ trait SequenceTrait
      * @return $this
      * @throws \Exception
      */
-    public function __call($name, $args)
+    public function __call($name, array $args)
     {
-        if (!isset($this->structure[$name])) {
-            throw new \Exception('invalid sequence');
-        }
-        $this->structure[] = (object) [
-            'name' => $name,
-            'options' => $args,
-            'is_method' =
-        ];
+        $this->addBlock($name, $args);
         return $this;
     }
 
@@ -39,52 +49,21 @@ trait SequenceTrait
      */
     public function __get($name)
     {
-        if (!is_null($child = $this->hashes($name))) {
+        if (!is_null($child = self::getByHash($name))) {
             $this->structure[] = &$child->structure;
             return $this;
         }
         if (!isset($this->structure[$name]) && isset($this->otherSequenceName)) {
-            return $this->__call($this->otherSequenceName, [$name]);
+            $this->addBlock($this->otherSequenceName, [$name], false);
+            return $this;
         }
         return $this->__call($name, []);
     }
 
     /**
-     * @return string
-     */
-    public function __toString()
-    {
-        return $this->hash;
-    }
-
-    /**
-     * @param string|null $hash
-     * @return string|SequenceTrait|void
-     */
-    private function hashes($hash = null)
-    {
-        static $hashes = [];
-        if (is_null($hash)) {
-            $hashes[$hash = '$' . spl_object_hash($this) . '$'] = $this;
-            return $hash;
-        }
-        if (isset($hashes[$hash])) {
-            return $hashes[$hash];
-        }
-    }
-
-    /**
-     * SequenceTrait constructor.
-     */
-    private function __construct()
-    {
-        $this->hash = $this->hashes();
-    }
-
-    /**
      * @return array
      */
-    protected function getStructure()
+    private function getStructure()
     {
         $topology = new Topology($this->structure);
         return $topology->getStructure($this->sequence);
