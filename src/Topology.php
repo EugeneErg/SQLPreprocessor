@@ -1,18 +1,34 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+/**
+ * Class Topology
+ * @package EugeneErg\SQLPreprocessor
+ */
 class Topology
 {
     const SEQUENCE_TYPE = 'sequence';
     const PARENT_TYPE = 'parent';
     const WORD_TYPE = 'word';
 
+    /**
+     * @var object[]
+     */
     private $blocks = [];
 
+    /**
+     * Topology constructor.
+     * @param array $blocks
+     */
     public function __construct(array $blocks = [])
     {
         $this->addBlocks($blocks);
     }
 
+    /**
+     * @param string $name
+     * @param string $type
+     * @param string[] $next
+     */
     public function addBlock($name, $type = self::PARENT_TYPE, array $next = [])
     {
         $lowerNext = [];
@@ -25,6 +41,9 @@ class Topology
         ];
     }
 
+    /**
+     * @param array $blocks
+     */
     public function addBlocks(array $blocks)
     {
         foreach ($blocks as $name => $option) {
@@ -60,8 +79,7 @@ class Topology
      * @param array $blocks
      * @param int $pos
      * @param string[] $ends
-     * @param string[]|null $filter
-     * @return \stdClass[]
+     * @return object[]
      * @throws \Exception
      */
     private function getArrayChildren(array $blocks, &$pos = 0, array $ends = [])
@@ -76,17 +94,17 @@ class Topology
             if (in_array($block->name, $ends)) {
                 return $result;
             }
-            $right = $this->blocks[$block->name];
-            if ($right->type !== self::WORD_TYPE) {
+            $regulation = $this->blocks[$block->name];
+            if ($regulation->type !== self::WORD_TYPE) {
                 $pos++;
-                if (is_array($blocks[$pos]) && $right->type === self::PARENT_TYPE) {
+                if (is_array($blocks[$pos]) && $regulation->type === self::PARENT_TYPE) {
                     $block->children = $this->getChildren(
                         array_values($blocks[$pos]), $block->name
                     );
                 }
-                elseif ($right->type === self::SEQUENCE_TYPE) {
+                elseif ($regulation->type === self::SEQUENCE_TYPE) {
                     $block->children = $this->getSequenceChildren(
-                        $blocks, $block->name, $pos, $ends + ["end$block->name"]
+                        $blocks, $block->name, $pos, $ends
                     );
                 }
                 else {
@@ -100,8 +118,13 @@ class Topology
         return $result;
     }
 
+    private function getPartSequence()
+    {
+
+    }
+
     /**
-     * @param \stdClass[] $blocks
+     * @param object[] $blocks
      * @param int $pos
      * @param string|null $parentName
      * @param string[] $ends
@@ -110,35 +133,66 @@ class Topology
      */
     private function getSequenceChildren(array $blocks, $parentName = null, &$pos = 0, array $ends = [])
     {
+        /*
+         * 1) if {...} else {...}
+         * 2) if {...}
+         * 3) if ... else {...}
+         * 4) if ... else ... endif
+         * 5) if {...} else ... endif
+         * 6) if ... endif
+         *
+         * после скобок ждем следующий шаг или другой блок но не endif
+         * без скобок ждем следующий шаг или endif
+         *
+         *
+         *
+         * */
         $result = [];
         $parent = $this->blocks[$parentName];
-        $steps = $parent->next;
-        $step = 0;
-        if ($parent->type === self::SEQUENCE_TYPE) {
-            array_unshift($steps, $parentName);
+
+        if (is_array($blocks[$pos])) {
+            $result[] = (object) [
+                'name' => $parentName,
+                'children' => $this->getArrayChildren(
+                    array_values($blocks[$pos])
+                )
+            ];
+            if (!isset($blocks[$pos + 1]) || !in_array(strtolower($blocks[$pos + 1]->name), $parent->next)) {
+                return $result;
+            }
         }
+        else {
+            $result[] = ( ) [
+                'name' => $parentName,
+                'children' => $this->getArrayChildren(
+                    array_values($blocks[$pos]), $pos, $ends + $parent->next + ["end$parentName"]
+                )
+            ];
+            
+
+
+
+        }
+
+
+        $step = 1;
+
+
+
         for (; $pos < count($blocks); $pos++) {
             $block = $blocks[$pos];
-            if (!is_array($block)) {
+            if (is_array($block)) {
                 $block->name = strtolower($block->name);
             }
-            switch ($parent->type) {
-                case self::SEQUENCE_TYPE:
-                    if (is_array($block)) {
-
-                    }
-
-                    break;
-                case self::PARENT_TYPE:
 
 
-            }
+
         }
         return $result;
     }
 
     /**
-     * @param \stdClass[] $blocks
+     * @param object[] $blocks
      * @param int $pos
      * @param string|null $parentName
      * @param string[] $ends
@@ -160,12 +214,12 @@ class Topology
                 return $result;
             }
             if (count($parent->next)) {
-                $pos = array_search($block->name, $parent->next);
-                if ($pos === false || $pos < $step) {
+                $nextPos = array_search($block->name, $parent->next);
+                if ($nextPos === false || $nextPos < $step) {
                     throw new \Exception('invalid structure');
                 }
-                if ($step != $pos) {
-                    $step = $pos;
+                if ($step != $nextPos) {
+                    $step = $nextPos;
                 }
             }
             $pos++;
@@ -181,47 +235,6 @@ class Topology
                 if (in_array($blocks[$pos]->name, $ends)) {
                     $result[] = $block;
                     $pos++;
-                    //"'fghgfhbf' && 12 || 123 * 5 + {$var([1,2,3,4])->test()->qwerty}"
-
-                    $table = (object) [];
-
-                    $newQuery = new Raw(['table1', 'table1', 'table2', 'table3'], [
-                        'test' => 12,
-                        'field' => 3
-                    ], function($table1, $table1_1, $table2, $table3, $values) {
-                        return "
-                            SELECT
-                                {$table1->id},
-                                {$table1->name}
-                                {$table1->old}
-                            FROM {$table1}
-                            JOIN {$table2}
-                              ON {$table2->id}={$table1_1->parent_id}
-                            WHERE {$table1->id}={$values->test}
-                        
-                        ";
-                    });
-                    $table2 = [];
-                    "
-                        (
-                            FROM $table
-                            JOIN (
-                                WHERE $table2
-                            )$table2
-                            WHERE({$table->parent_id} = {$table::string(\"rgrthbtg\")})
-                            ORDER BY {$table->parent_id}
-                            GROUP BY {$table->parent_id}
-                        )({$table->test("rgrthyt")->qwery}
-                            
-                        
-                        )
-                        SELECT
-                        
-                        
-                    
-                    
-                    ";
-
                     return $result;
                 }
             }
