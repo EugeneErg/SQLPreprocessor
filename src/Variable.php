@@ -14,6 +14,11 @@ class Variable implements \ArrayAccess
     private $object;
 
     /**
+     * @var mixed
+     */
+    private $context;
+
+    /**
      * @var object[]
      */
     private $sequence = [];
@@ -26,7 +31,7 @@ class Variable implements \ArrayAccess
     /**
      * @var string[]
      */
-    private static $publicStaticMethods = ['getObject', 'getSequence'];
+    private static $publicStaticMethods = ['getObject', 'getSequence', 'getContext', 'getVariable'];
 
     /**
      * Variable constructor.
@@ -57,6 +62,29 @@ class Variable implements \ArrayAccess
     }
 
     /**
+     * @param string|self $variable
+     * @return mixed
+     */
+    private static function getContext($variable)
+    {
+        return self::getByHash($variable)->context;
+    }
+
+    /**
+     * @param string|self $variable
+     * @return mixed
+     */
+    private static function getVariable($variable)
+    {
+        $variable = self::getByHash($variable);
+        return (object) [
+            'context' => $variable->context,
+            'object' => $variable->object,
+            'sequence' => $variable->sequence,
+        ];
+    }
+
+    /**
      * @param string $name
      * @return self
      */
@@ -79,8 +107,11 @@ class Variable implements \ArrayAccess
      * @return self
      * @throws \Exception
      */
-    public function offsetGet($offset)
+    public function offsetGet($offset = null)
     {
+        if (func_num_args() !== 1 || (!is_int($offset) && !is_string($offset))) {
+            return $this->__call('offsetGet', func_get_args());
+        }
         return $this->__get($offset);
     }
 
@@ -140,5 +171,11 @@ class Variable implements \ArrayAccess
             return call_user_func_array([self::class, $name], $arguments);
         }
         throw new \Exception("Inaccessible static method $name");
+    }
+
+    public function __invoke($context)
+    {
+        $this->context = $context;
+        return $this;
     }
 }
