@@ -134,7 +134,9 @@ class Topology
                         $this->breakLevel--;
                         return $result;
                     }
-                    $pos--;
+                    if ($this->breakLevel !== 1) {
+                        $pos--;
+                    }
                 }
             }
         }
@@ -262,7 +264,7 @@ class Topology
             if (isset($blocks[$pos]) && is_array($blocks[$pos])) {
                 $block->children = $this->getArrayChildren($blocks[$pos]);
             } else {
-                $block->children = $this->getArrayChildren($blocks, $pos, $ends + $next);
+                $block->children = $this->getArrayChildren($blocks, $pos, array_merge($ends, $next));
                 if ($this->breakLevel > count($next)) {
                     $this->breakLevel -= count($next);
                     return $result;
