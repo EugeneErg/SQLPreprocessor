@@ -3,6 +3,9 @@
 /**
  * Class Variable
  * @package EugeneErg\SQLPreprocessor
+ *
+ *
+ * @method static mixed *()
  */
 class Variable implements \ArrayAccess
 {
@@ -12,11 +15,6 @@ class Variable implements \ArrayAccess
      * @var array|Raw|SQL|object|string|null
      */
     private $object;
-
-    /**
-     * @var mixed
-     */
-    private $context;
 
     /**
      * @var object[]
@@ -31,7 +29,7 @@ class Variable implements \ArrayAccess
     /**
      * @var string[]
      */
-    private static $publicStaticMethods = ['getObject', 'getSequence', 'getContext', 'getVariable'];
+    private static $publicStaticMethods = ['getObject', 'getSequence', 'getVariable'];
 
     /**
      * Variable constructor.
@@ -47,40 +45,29 @@ class Variable implements \ArrayAccess
      * @param string|self $variable
      * @return mixed
      */
-    private static function getObject($variable)
+    private function getObject($variable)
     {
-        return self::getByHash($variable)->object;
+        return $this->object;
     }
 
     /**
      * @param string|self $variable
      * @return array
      */
-    private static function getSequence($variable)
+    private function getSequence($variable)
     {
-        return self::getByHash($variable)->sequence;
+        return $this->sequence;
     }
 
     /**
      * @param string|self $variable
      * @return mixed
      */
-    private static function getContext($variable)
+    private function getVariable($variable)
     {
-        return self::getByHash($variable)->context;
-    }
-
-    /**
-     * @param string|self $variable
-     * @return mixed
-     */
-    private static function getVariable($variable)
-    {
-        $variable = self::getByHash($variable);
         return (object) [
-            'context' => $variable->context,
-            'object' => $variable->object,
-            'sequence' => $variable->sequence,
+            'object' => $this->object,
+            'sequence' => $this->sequence,
         ];
     }
 
@@ -167,15 +154,21 @@ class Variable implements \ArrayAccess
      */
     public static function __callStatic($name, array $arguments)
     {
+        $hash = array_shift($arguments);
+        $variable = self::getByHash($hash);
         if (in_array($name, self::$publicStaticMethods)) {
-            return call_user_func_array([self::class, $name], $arguments);
+            return call_user_func_array([$variable, $name], $arguments);
         }
         throw new \Exception("Inaccessible static method $name");
     }
 
-    public function __invoke($context)
+    /**
+     * __invoke block function is context
+     * @param mixed ...$params
+     * @return Variable
+     */
+    public function __invoke(...$params)
     {
-        $this->context = $context;
-        return $this;
+        return $this->__call('__invoke', $params);
     }
 }
