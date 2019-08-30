@@ -82,7 +82,7 @@ class Topology
      */
     private function getBreakLevel($name, array $ends)
     {
-        for ($i = count($ends) - 1; $i >= 0; $i++) {
+        for ($i = count($ends) - 1; $i >= 0; $i--) {
             if ($ends[$i] === $name) {
                 return count($ends) - $i;
             }
@@ -128,7 +128,7 @@ class Topology
                 }
                 else {
                     $block->children = $this->getChildren(
-                        $blocks, $block->name, $pos, $ends + ["end$block->name"]
+                        $blocks, $block->name, $pos, array_merge($ends, ["end$block->name"])
                     );
                     if ($this->breakLevel > 1) {
                         $this->breakLevel--;
@@ -204,7 +204,7 @@ class Topology
                 $pos++;
             } else {
                 $current->children = $this->getArrayChildren(
-                    $blocks, $pos, $ends + $next + ["end$parentName"]
+                    $blocks, $pos, array_merge($ends, $next, ["end$parentName"])
                 );
             }
             if (!isset($blocks[$pos])) {
@@ -222,8 +222,10 @@ class Topology
                 $this->breakLevel = $this->getBreakLevel($current->name, $ends);
                 return $result;
             }
-            array_splice($next, 0, $step - 1);
+            $result[] = $current;
+            array_splice($next, 0, $step);
         }
+        $this->breakLevel = 0;
         return $result;
     }
 
@@ -268,6 +270,7 @@ class Topology
                 $pos--;
             }
         }
+        $this->breakLevel = 0;
         return $result;
     }
 
