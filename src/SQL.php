@@ -1,5 +1,9 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+/**
+ * Class SQL
+ * @package EugeneErg\SQLPreprocessor
+ */
 class SQL
 {
     use SequenceTrait;
@@ -8,9 +12,6 @@ class SQL
     const INSERT_TYPE = 'insert';
     const DELETE_TYPE = 'delete';
     const SELECT_TYPE = 'select';
-
-    private $hash;
-    private $topology;
 
     protected $structure = [
         'if' => ['type' => Topology::SEQUENCE_TYPE, 'next' => ['elseif', 'else']],
@@ -25,16 +26,6 @@ class SQL
         'switch' => ['case', 'default'],
     ];
     protected $otherSequenceName = 'return';
-
-    public function __clone()
-    {
-
-    }
-
-    public function __wakeup()
-    {
-
-    }
 
     public static function __callStatic($name, $args)
     {
@@ -63,6 +54,10 @@ class SQL
 
     }
 
+    /**
+     * @return null
+     * @throws \Exception
+     */
     private function getQuestionType()
     {
         static $root;
@@ -190,8 +185,9 @@ class SQL
 
     public function __invoke(Translater $sqlClass, \Closure $function = null)
     {
-        $topology = $this->getTopology();
-        $structure = $topology->getStructure($this->structure);
+        $structure = $this->getStructure();
+        $questionType = $this->getQuestionType($structure);
+
 
 
 

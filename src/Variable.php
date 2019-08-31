@@ -3,9 +3,6 @@
 /**
  * Class Variable
  * @package EugeneErg\SQLPreprocessor
- *
- *
- * @method static mixed *()
  */
 class Variable implements \ArrayAccess
 {
@@ -25,6 +22,16 @@ class Variable implements \ArrayAccess
      * @var self[]
      */
     private $children = [];
+
+    /**
+     * @var array
+     */
+    private $arguments = [];
+
+    /**
+     * @var self[][]
+     */
+    private $methods = [];
 
     /**
      * @var string[]
@@ -96,7 +103,7 @@ class Variable implements \ArrayAccess
      */
     public function offsetGet($offset = null)
     {
-        if (func_num_args() !== 1 || (!is_int($offset) && !is_string($offset))) {
+        if (func_num_args() !== 1 || !(is_int($offset) || is_string($offset))) {
             return $this->__call('offsetGet', func_get_args());
         }
         return $this->__get($offset);
@@ -109,13 +116,28 @@ class Variable implements \ArrayAccess
      */
     public function __call($name, array $arguments)
     {
-        $new = clone $this;
-        $new->sequence[] = (object) [
-            'name' => $name,
-            'args' => $arguments,
-            'is_method' => true,
-        ];
-        return $new;
+        $keys = [];
+        foreach ($arguments as $argument) {
+            $key = array_search($argument, $this->arguments, true);
+            if (is_null($key)) {
+                $key = count($this->arguments);
+                $this->arguments[] = $argument;
+            }
+            $keys[] = $key;
+        }
+
+        $key = implode('-', $keys);
+
+        if (!isset($this->methods[$name][$key])) {
+            $new = clone $this;
+            $new->sequence[$name] = (object) [
+                'name' => $name,
+                'args' => $arguments,
+                'is_method' => true,
+            ];
+            $this->methods[$name][$key] = $new;
+        }
+        return $this->methods[$name][$key];
     }
 
     /**
@@ -154,6 +176,9 @@ class Variable implements \ArrayAccess
      */
     public static function __callStatic($name, array $arguments)
     {
+        if (count($arguments) < 1) {
+            throw new \Exception('invalid count arguments');
+        }
         $hash = array_shift($arguments);
         $variable = self::getByHash($hash);
         if (in_array($name, self::$publicStaticMethods)) {

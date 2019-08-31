@@ -54,7 +54,13 @@ trait SequenceTrait
             return $this;
         }
         if (!isset($this->structure[$name]) && isset($this->otherSequenceName)) {
-            $this->addBlock($this->otherSequenceName, [$name], false);
+            if ($this->otherSequenceName instanceof \Closure) {
+                $callback = $this->otherSequenceName;
+                $this->structure[] = $callback($name);
+            }
+            else {
+                $this->addBlock($this->otherSequenceName, [$name], false);
+            }
             return $this;
         }
         return $this->__call($name, []);
@@ -62,6 +68,7 @@ trait SequenceTrait
 
     /**
      * @return array
+     * @throws \Exception
      */
     private function getStructure()
     {
