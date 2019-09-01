@@ -6,6 +6,8 @@
  */
 class Raw
 {
+    use HashesTrait;
+
     const STRING_TYPE = 'string';
     const PARENTHESIS_TYPE = 'parenthesis';
     const RECTANGULAR_TYPE = 'rectangular';
@@ -17,6 +19,9 @@ class Raw
     const METHOD_TYPE = 'method';
     const FIELD_TYPE = 'field';
 
+    /**
+     * @var string[]
+     */
     private static $firstPatterns = [
         self::VARIABLE_TYPE => '\\$[0-9a-f]{32}\\$',
         self::SQLVAR_TYPE => '@[\\w\\.]*',
@@ -27,11 +32,18 @@ class Raw
         self::FIELD_TYPE => '(?:\\.\\s*)?`(?:[^`]*(?:``)*)+`',
         self::CONTEXT_TYPE => ',|:|[+-]*|[^\\[\\]\\(\\)\\w\\s\'",:+-]+'
     ];
+
+    /**
+     * @var string[]
+     */
     private static $patterns = [
         self::PARENTHESIS_TYPE => "\\[[^'\"\]\\[]*\\]",
         self::RECTANGULAR_TYPE => "\\([^'\"\)\\(]*\\)",
     ];
 
+    /**
+     * @var string
+     */
     private $string;
 
     /**
@@ -41,6 +53,7 @@ class Raw
     public function __construct($string)
     {
         $this->string = $string;
+        $this->hash = Hasher::getHash($this);
     }
 
     /**
@@ -58,7 +71,7 @@ class Raw
             case self::RECTANGULAR_TYPE:
                 return [];
             case self::VARIABLE_TYPE:
-                return Variable::find($value);
+                return Hasher::getObject($value);
             case self::METHOD_TYPE:
                 return trim(substr($value, 1));
             case self::CONTEXT_TYPE:

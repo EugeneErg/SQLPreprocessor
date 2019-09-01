@@ -23,11 +23,11 @@ trait SequenceTrait
         if (!isset($this->sequence[$name])) {
             throw new \Exception('invalid sequence');
         }
-        $this->structure[] = (object) [
-            'name' => $name,
-            'options' => $args,
-            'is_method' => $is_method,
-        ];
+        $this->structure[] = new Chain(
+            $name,
+            $args,
+            $is_method
+        );
     }
 
     /**
@@ -49,19 +49,19 @@ trait SequenceTrait
      */
     public function __get($name)
     {
-        if (!is_null($child = self::getByHash($name))) {
+        if (!is_null($child = Hasher::getObject($name))) {
             $this->structure[] = &$child->structure;
             return $this;
         }
-        if (!isset($this->structure[$name]) && isset($this->otherSequenceName)) {
-            if ($this->otherSequenceName instanceof \Closure) {
-                $callback = $this->otherSequenceName;
-                $this->structure[] = $callback($name);
-            }
-            else {
+        if (!isset($this->structure[$name])) {
+            if (isset($this->otherSequenceName)) {
                 $this->addBlock($this->otherSequenceName, [$name], false);
+                return $this;
             }
-            return $this;
+            if (method_exists($this, 'getStructureBlock')) {
+                $this->structure[] = $callback = $this->getStructureBlock($name);
+                return $this;
+            }
         }
         return $this->__call($name, []);
     }
@@ -73,6 +73,14 @@ trait SequenceTrait
     private function getStructure()
     {
         $topology = new Topology($this->structure);
-        return $topology->getStructure($this->sequence);
+        if (method_exists($this, 'chainToArray')) {
+            $callback = function($object, Chain $parent) {
+                return $this->chainToArray($object, $parent);
+            };
+        }
+        else {
+            $callback = null;
+        }
+        return $topology->getStructure($this->sequence, $callback);
     }
 }

@@ -14,7 +14,7 @@ class Variable implements \ArrayAccess
     private $object;
 
     /**
-     * @var object[]
+     * @var Chain[]
      */
     private $sequence = [];
 
@@ -36,7 +36,7 @@ class Variable implements \ArrayAccess
     /**
      * @var string[]
      */
-    private static $publicStaticMethods = ['getObject', 'getSequence', 'getVariable'];
+    private static $publicMethods = ['getObject', 'getSequence', 'getVariable'];
 
     /**
      * Variable constructor.
@@ -44,33 +44,30 @@ class Variable implements \ArrayAccess
      */
     public function __construct($object = null)
     {
-        $this->getCurrentHash();
+        $this->hash = Hasher::getHash($this);
         $this->object = $object;
     }
 
     /**
-     * @param string|self $variable
      * @return mixed
      */
-    private function getObject($variable)
+    private function getObject()
     {
         return $this->object;
     }
 
     /**
-     * @param string|self $variable
      * @return array
      */
-    private function getSequence($variable)
+    private function getSequence()
     {
         return $this->sequence;
     }
 
     /**
-     * @param string|self $variable
-     * @return mixed
+     * @return object
      */
-    private function getVariable($variable)
+    private function getVariable()
     {
         return (object) [
             'object' => $this->object,
@@ -86,11 +83,7 @@ class Variable implements \ArrayAccess
     {
         if (!isset($this->children[$name])) {
             $new = clone $this;
-            $new->sequence[] = (object) [
-                'name' => $name,
-                'args' => [],
-                'is_method' => false,
-            ];
+            $new->sequence[] = new Chain($name);
             $this->children[$name] = $new;
         }
         return $this->children[$name];
@@ -130,11 +123,11 @@ class Variable implements \ArrayAccess
 
         if (!isset($this->methods[$name][$key])) {
             $new = clone $this;
-            $new->sequence[$name] = (object) [
-                'name' => $name,
-                'args' => $arguments,
-                'is_method' => true,
-            ];
+            $new->sequence[$name] = new Chain(
+                $name,
+                $arguments,
+                true
+            );
             $this->methods[$name][$key] = $new;
         }
         return $this->methods[$name][$key];
@@ -179,9 +172,9 @@ class Variable implements \ArrayAccess
         if (count($arguments) < 1) {
             throw new \Exception('invalid count arguments');
         }
-        $hash = array_shift($arguments);
-        $variable = self::getByHash($hash);
-        if (in_array($name, self::$publicStaticMethods)) {
+        if (in_array($name, self::$publicMethods)) {
+            $hash = array_shift($arguments);
+            $variable = Hasher::getObject($hash);
             return call_user_func_array([$variable, $name], $arguments);
         }
         throw new \Exception("Inaccessible static method $name");

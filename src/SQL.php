@@ -3,6 +3,29 @@
 /**
  * Class SQL
  * @package EugeneErg\SQLPreprocessor
+ *
+ * @property $this $else
+ * @property $this $endif
+ * @property $this $groupby
+ * @property $this $endgroupby
+ * @property $this $endorderby
+ * @property $this $default
+ * @property $this $endswitch
+ * @property $this $endvar
+ * @property $this $endfrom
+ * @property $this $enddelete
+ *
+ * @method $this if(mixed $argument)
+ * @method $this elseif(mixed $argument)
+ * @method $this from(mixed ...$arguments)
+ * @method $this delete(mixed ...$arguments)
+ * @method $this orderby(mixed $argument)
+ * @method $this select(mixed $argument)
+ * @method $this insert(mixed $argument)
+ * @method $this update(mixed $argument)
+ * @method $this switch(mixed $argument)
+ * @method $this case(mixed $argument)
+ * @method $this var(mixed $argument)
  */
 class SQL
 {
@@ -20,14 +43,39 @@ class SQL
         'orderby' => Topology::PARENT_TYPE,
         'groupby' => Topology::PARENT_TYPE,
         'var' => Topology::PARENT_TYPE,
-        'select' => Topology::PARENT_TYPE,
+        'select',
         'insert',
         'update',
         'switch' => ['case', 'default'],
     ];
-    protected $otherSequenceName = 'return';
 
-    public static function __callStatic($name, $args)
+    private function getStructureBlock($value)
+    {
+        $objectFromHash = Hasher::getObject($value);
+        if ($objectFromHash instanceof Variable) {
+            return (object) [
+                'name' => 'return',
+                'options' => [$objectFromHash],
+                'is_method' => true,
+            ];
+        }
+        if ($objectFromHash instanceof Raw) {
+            return $objectFromHash;
+        }
+        return (object) [
+            'name' => 'return',
+            'options' => [$value],
+            'is_method' => true,
+        ];
+    }
+
+    /**
+     * @param string $name
+     * @param array $args
+     * @return $this
+     * @throws \Exception
+     */
+    public static function __callStatic($name, array $args)
     {
         $sql = new self();
         return $sql->__call($name, $args);
@@ -128,35 +176,31 @@ class SQL
              *      'field2' => $table->field2
              * ])
              *
-             *
-             * update($table, [
-             *      'field1' => $table->field1,
-             *      'field2' => $table->field2
-             * ])
-             * ->update($table [
-             *      'field1' => $table->field1,
-             *      'field2' => $table->field2
+             * from('left', $table, 'distinct', new Raw("$table1->id = $tabke2->id"), [
+             *      sql::from()
              * ])
              *
+             *
+             * update([
+             *     $table => [
+             *          'field1' => $table->field1,
+             *          'field2' => $table->field2
+             *     ],
+             *     $table => [
+             *          'field1' => $table->field1,
+             *          'field2' => $table->field2
+             *     ]
+             * ])
+             *
+             * select([
+             *     $table->field,
+             *     'alias' => $table->field,
+             *     'string key' => Raw,
+             *     Raw => 'string value'
+             * ])
              *
              *
              * */
-
-            $select = new Structure(function(Structure $select) {
-                $select->getVariant(
-                    ['return' => 1, 'select' => 0, 'if' => 0, 'switch' => 0],
-                    ['return' => 0, 'select',      'if' => 0, 'switch' => 0],
-                    ['return' => 0, 'select' => 0, 'if' => 1, 'switch' => 0],
-                    ['return' => 0, 'select' => 0, 'if' => 0, 'switch' => 1]
-                );
-                return true;
-            });
-            $select->addChildren([
-                'select' => $select,
-                'if' => $if,
-                'switch' => $switch,
-                'return' => true,
-            ]);
             $root = new Structure(function(Structure $root) use(&$result) {
                 $type = $root->getVariant(
                     ['update',      'from' => 1,      'insert' => 0, 'delete' => 0, 'select' => 0],
@@ -176,7 +220,7 @@ class SQL
                 'insert' => true,
                 'update' => true,
                 'delete' => $delete,
-                'select' => $select,
+                'select' => true,
             ]);
         };
         $root($this->getStructure());
@@ -208,8 +252,6 @@ class SQL
         }
         return $this->createResult($function($request), $select);
     }
-
-
 
     /**
      * @param string $context
@@ -521,4 +563,17 @@ class SQL
          * */
     }
 
+    /**
+     * @param Raw $raw
+     * @param Chain $parent
+     *
+     * @retur array
+     */
+    private function chainToArray(Raw $raw, Chain $parent)
+    {
+        //TODO raw string to array of chain
+        $objects = $raw->parse();
+
+
+    }
 }
