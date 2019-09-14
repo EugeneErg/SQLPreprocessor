@@ -4,7 +4,7 @@
  * Class Chain
  * @package EugeneErg\SQLPreprocessor
  */
-class Chain
+class Link
 {
     const TYPE_NORMAL = null;
     const TYPE_LOWER = false;

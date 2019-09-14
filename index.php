@@ -50,7 +50,7 @@ use EugeneErg\SQLPreprocessor\Topology;
 
     use EugeneErg\SQLPreprocessor\Variable;
     use EugeneErg\SQLPreprocessor\Translaters;
-    use EugeneErg\SQLPreprocessor\SQL;
+    use EugeneErg\SQLPreprocessor\Query;
     use EugeneErg\SQLPreprocessor\Raw;
     
     function dd() {
@@ -64,19 +64,19 @@ use EugeneErg\SQLPreprocessor\Topology;
     }
 
     function sql() {
-        return call_user_func_array([SQL::class, 'create'], func_get_args());
+        return call_user_func_array([Query::class, 'create'], func_get_args());
     }
     function select() {
-        return call_user_func_array([SQL::class, 'select'], func_get_args());
+        return call_user_func_array([Query::class, 'select'], func_get_args());
     }
     function from() {
-        return call_user_func_array([SQL::class, 'from'], func_get_args());
+        return call_user_func_array([Query::class, 'from'], func_get_args());
     }
     function SQLSwitch() {
-        return call_user_func_array([SQL::class, 'switch'], func_get_args());
+        return call_user_func_array([Query::class, 'switch'], func_get_args());
     }
     function SQLReturn() {
-        return call_user_func_array([SQL::class, 'return'], func_get_args());
+        return call_user_func_array([Query::class, 'return'], func_get_args());
     }
     function _log($text) {
         echo $text . '<br>';

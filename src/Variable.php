@@ -9,12 +9,12 @@ class Variable implements \ArrayAccess
     use HashesTrait;
 
     /**
-     * @var array|Raw|SQL|object|string|null
+     * @var array|Raw|Query|object|string|null
      */
     private $object;
 
     /**
-     * @var Chain[]
+     * @var Link[]
      */
     private $sequence = [];
 
@@ -40,7 +40,7 @@ class Variable implements \ArrayAccess
 
     /**
      * Variable constructor.
-     * @param SQL|string|object|array|Raw|null $object
+     * @param Query|string|object|array|Raw|null $object
      */
     public function __construct($object = null)
     {
@@ -83,7 +83,7 @@ class Variable implements \ArrayAccess
     {
         if (!isset($this->children[$name])) {
             $new = clone $this;
-            $new->sequence[] = new Chain($name);
+            $new->sequence[] = new Link($name);
             $this->children[$name] = $new;
         }
         return $this->children[$name];
@@ -123,7 +123,7 @@ class Variable implements \ArrayAccess
 
         if (!isset($this->methods[$name][$key])) {
             $new = clone $this;
-            $new->sequence[$name] = new Chain(
+            $new->sequence[$name] = new Link(
                 $name,
                 $arguments,
                 true

@@ -102,13 +102,13 @@ class Topology
 
     /**
      * @param mixed $block
-     * @param Chain $prev
+     * @param Link $prev
      * @return array
      * @throws \Exception
      */
     private function getBlock($block, $prev)
     {
-        if (is_array($block) || $block instanceof Chain) {
+        if (is_array($block) || $block instanceof Link) {
             return $block;
         }
         if (!isset($this->callback)) {
@@ -126,7 +126,7 @@ class Topology
      * @param array $blocks
      * @param int $pos
      * @param string[] $ends
-     * @return Chain[]
+     * @return Link[]
      * @throws \Exception
      */
     private function getArrayChildren(array $blocks, &$pos = 0, array $ends = [])
@@ -134,13 +134,13 @@ class Topology
         $result = [];
         for (; $pos < count($blocks); $pos++) {
             $block = $blocks[$pos];
-            if (!$block instanceof  Chain) {
+            if (!$block instanceof  Link) {
                 throw new \Exception('invalid sequence');
             }
-            if ($this->breakLevel = $this->getBreakLevel($block->getName(Chain::TYPE_LOWER), $ends)) {
+            if ($this->breakLevel = $this->getBreakLevel($block->getName(Link::TYPE_LOWER), $ends)) {
                 return $result;
             }
-            $regulation = $this->blocks[$block->getName(Chain::TYPE_LOWER)];
+            $regulation = $this->blocks[$block->getName(Link::TYPE_LOWER)];
             $result[] = $block;
             if ($regulation->type !== self::WORD_TYPE) {
                 $pos++;
@@ -150,22 +150,22 @@ class Topology
                 }
                 if ($regulation->type === self::SEQUENCE_TYPE) {
                     $block->setChildren($this->getSequenceChildren(
-                        $blocks, $block->getName(Chain::TYPE_LOWER), $pos, $ends
+                        $blocks, $block->getName(Link::TYPE_LOWER), $pos, $ends
                     ));
                     if ($this->breakLevel) {
                         return $result;
                     }
                     $pos--;
                 }
-                elseif (!$blocks[$pos] instanceof Chain) {
+                elseif (!$blocks[$pos] instanceof Link) {
                     $block->setChildren($this->getChildren(
-                        $this->getBlock($blocks[$pos], $block), $block->getName(Chain::TYPE_LOWER)
+                        $this->getBlock($blocks[$pos], $block), $block->getName(Link::TYPE_LOWER)
                     ));
                 }
                 else {
                     $block->setChildren($this->getChildren(
-                        $blocks, $block->getName(Chain::TYPE_LOWER), $pos,
-                        array_merge($ends, ["end{$block->getName(Chain::TYPE_LOWER)}"])
+                        $blocks, $block->getName(Link::TYPE_LOWER), $pos,
+                        array_merge($ends, ["end{$block->getName(Link::TYPE_LOWER)}"])
                     ));
                     if ($this->breakLevel > 1) {
                         $this->breakLevel--;
@@ -186,7 +186,7 @@ class Topology
      * @param int $pos
      * @param string|null $parentName
      * @param string[] $ends
-     * @return Chain[]
+     * @return Link[]
      * @throws \Exception
      */
     private function getSequenceChildren(array $blocks, $parentName = null, &$pos = 0, array $ends = [])
@@ -227,10 +227,10 @@ class Topology
 
         $parent = $this->blocks[$parentName];
         $next = $parent->next;
-        $current = new Chain($parentName);
+        $current = new Link($parentName);
         $result = [$current];
         for (; $pos < count($blocks); $pos++) {
-            if (!$blocks[$pos] instanceof Chain) {
+            if (!$blocks[$pos] instanceof Link) {
                 $current->setChildren($this->getArrayChildren($this->getBlock($blocks[$pos], $current)));
                 $pos++;
             } else {
@@ -242,15 +242,15 @@ class Topology
                 return $result;
             }
             $current = $blocks[$pos];
-            if (!$current instanceof Chain) {
+            if (!$current instanceof Link) {
                 throw new \Exception('incorrect structure');
             }
-            if ($current->getName(Chain::TYPE_LOWER) === "end$parentName") {
+            if ($current->getName(Link::TYPE_LOWER) === "end$parentName") {
                 $this->breakLevel = 0;
                 return $result;
             }
-            if (false === $step = array_search($current->getName(Chain::TYPE_LOWER), $next)) {
-                $this->breakLevel = $this->getBreakLevel($current->getName(Chain::TYPE_LOWER), $ends);
+            if (false === $step = array_search($current->getName(Link::TYPE_LOWER), $next)) {
+                $this->breakLevel = $this->getBreakLevel($current->getName(Link::TYPE_LOWER), $ends);
                 return $result;
             }
             $result[] = $current;
@@ -265,7 +265,7 @@ class Topology
      * @param int $pos
      * @param string|object $parentName
      * @param string[] $ends
-     * @return Chain[]
+     * @return Link[]
      * @throws \Exception
      */
     private function getChildren(array $blocks, $parentName, &$pos = 0, array $ends = [])
@@ -275,14 +275,14 @@ class Topology
         $next = $parent->next;
         for (; $pos < count($blocks); $pos++) {
             $block = $blocks[$pos];
-            if (!$block instanceof Chain) {
+            if (!$block instanceof Link) {
                 throw new \Exception('invalid structure');
             }
-            if ($this->breakLevel = $this->getBreakLevel($block->getName(Chain::TYPE_LOWER), $ends)) {
+            if ($this->breakLevel = $this->getBreakLevel($block->getName(Link::TYPE_LOWER), $ends)) {
                 return $result;
             }
             if (count($parent->next)) {
-                $nextPos = array_search($block->getName(Chain::TYPE_LOWER), $next);
+                $nextPos = array_search($block->getName(Link::TYPE_LOWER), $next);
                 if ($nextPos === false) {
                     throw new \Exception('invalid structure');
                 }
@@ -290,7 +290,7 @@ class Topology
             }
             $result[] = $block;
             $pos++;
-            if (isset($blocks[$pos]) && !$blocks[$pos] instanceof Chain) {
+            if (isset($blocks[$pos]) && !$blocks[$pos] instanceof Link) {
                 $block->setChildren($this->getArrayChildren($this->getBlock($blocks[$pos], $block)));
             } else {
                 $block->setChildren($this->getArrayChildren($blocks, $pos, array_merge($ends, $next)));

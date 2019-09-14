@@ -1,7 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
 /**
- * Class SQL
+ * Class Query
  * @package EugeneErg\SQLPreprocessor
  *
  * @property $this $else
@@ -27,7 +27,7 @@
  * @method $this case(mixed $argument)
  * @method $this var(mixed $argument)
  */
-class SQL
+class Query
 {
     use SequenceTrait;
 
@@ -39,13 +39,13 @@ class SQL
     protected $structure = [
         'if' => ['type' => Topology::SEQUENCE_TYPE, 'next' => ['elseif', 'else']],
         'from' => Topology::PARENT_TYPE,
-        'delete' => Topology::PARENT_TYPE,
         'orderby' => Topology::PARENT_TYPE,
         'groupby' => Topology::PARENT_TYPE,
         'var' => Topology::PARENT_TYPE,
         'select',
+        'delete',
         'insert',
-        'update',
+        'update' => Topology::PARENT_TYPE,
         'switch' => ['case', 'default'],
     ];
 
@@ -112,11 +112,6 @@ class SQL
         $result = null;
         if (!$root) {
             $default = new Structure(function(Structure $default) {
-                $default->getVariant(
-                    ['if' => 1, 'switch' => 0, 'return' => 0],
-                    ['if' => 0, 'switch' => 1, 'return' => 0],
-                    ['if' => 0, 'switch' => 0, 'return' => 1]
-                );
                 return true;
             });
             $if = new Structure(function(Structure $if) {
@@ -156,16 +151,6 @@ class SQL
                 'return' => true,
                 'var' => $default,
             ]);
-            $delete = new Structure();
-            $delete->addChildren([
-                'from' => $from,
-                'delete' => $delete,
-                'switch' => $switch,
-                'orderby' => $default,
-                'groupby' => $default,
-                'return' => true,
-                'var' => $default,
-            ]);
 
             /*
              * from()->{
@@ -181,7 +166,13 @@ class SQL
              * ])
              *
              *
-             * update([
+             * update->
+             *     if ()->{"
+             *          $var->field = 1,
+             *          $var->field2 = 3
+             *     "}->else->{
+             *
+             *      }
              *     $table => [
              *          'field1' => $table->field1,
              *          'field2' => $table->field2
@@ -192,6 +183,10 @@ class SQL
              *     ]
              * ])
              *
+             * UPDATE `table`
+             * SET `field1`=1, `field2`=2...
+             *
+             *
              * select([
              *     $table->field,
              *     'alias' => $table->field,
@@ -201,6 +196,7 @@ class SQL
              *
              *
              * */
+
             $root = new Structure(function(Structure $root) use(&$result) {
                 $type = $root->getVariant(
                     ['update',      'from' => 1,      'insert' => 0, 'delete' => 0, 'select' => 0],
@@ -218,8 +214,8 @@ class SQL
             }, [
                 'from' => $from,
                 'insert' => true,
-                'update' => true,
-                'delete' => $delete,
+                'update' => $default,
+                'delete' => true,
                 'select' => true,
             ]);
         };
@@ -251,32 +247,6 @@ class SQL
             return $request;
         }
         return $this->createResult($function($request), $select);
-    }
-
-    /**
-     * @param string $context
-     * @param array $structure
-     * @return object[][]
-     */
-    private function explode($context, array $structure)
-    {
-        $result = [];
-        $value = [];
-        foreach ($structure as $item) {
-            if ($item->type !== self::CONTEXT_TYPE
-                || $item->value !== $context
-            ) {
-                $value[] = $item;
-            }
-            else {
-                $result[] = $value;
-                $value = [];
-            }
-        }
-        if (count($value)) {
-            $result[] = $value;
-        }
-        return $result;
     }
 
     /**
@@ -346,202 +316,6 @@ class SQL
         return $this->getFromBlock($structure);
     }
 
-    /**
-     * @param array $structure
-     * @return object[]
-     * @throws \Exception
-     */
-    private function getSelectBlock(array $structure)
-    {
-        /*
-         * string, context, sql_var, sql_method, number, variable, field, method
-         * con
-         * */
-        // селект это набор аргументов, переданных через запятую
-        /*
-         * SELECT
-         * [//инкрементный ключ, а значит правила для каждой строки
-             * field_1,//название поля - ключ, значение пол - значение
-             * field2: field4, //значение одного поля - ключ, значение второго - значение
-             * "string": field5,//строка - ключ, значение поля - значение
-             * 'string' field_6,//ключ значение можно без двоеточия
-             * `string` field7,//в данном случае ключ-строка string
-             * field3 [//ключ - значение поля, а значение - массив с теми же правилами
-             *   value1, `q`: value2, `q2` value3
-             * ],
-             * [//инкрементный ключ у массива можно без двоеточия
-             *   value1, `q`: value2, `q2` value3
-             * ],
-         *   * : field8//инкрементный ключ, значение поля 8
-         *]
-         *
-         * что делать с этим
-         * [
-         *  (q ? 1 : 0): field1
-         *]
-         * */
-        /*
-         * 1) разделяем на части, запятыми
-         *    2.1) если часть - массив, то ключ инкремент, а значение - массив, анализируем
-         *    2.2) если в части есть двоеточие, всё, что после двоеточия - значение, если есть до - ключ, иначе инкремент
-         *    2.3) если нет двоеточия
-         *       2.3.1) если после(круглых скобок, метода, поля, переменной, квадратных скобок, строки) нет (метода, котекста, квадратных скобок)
-         *          то считаем, между ними разделитель и левая часть - ключ, правая - значение
-         *
-         * */
-        $structure = $this->explode(',', $structure);
-        $result = [];
-        foreach ($structure as $value) {
-            $keyValue = $this->explode(':', $value);
-            switch (count($keyValue)) {
-                case 0:
-                    break;
-                case 1:
-                    if (count($keyValue[0])) {
-                        if ($keyValue[0][0]->type === self::RECTANGULAR_TYPE) {
-                            if (count($keyValue[0]) > 1) {
-                                throw new \Exception('');
-                            }
-                            $value = $this->getSelectBlock($keyValue[1]);
-                            $key = null;
-                        }
-                        else {
-                            $value = $keyValue[0];
-                            $key = [
-                                (object) [
-                                    'type' => self::STRING_TYPE,
-                                    'value' => $this->getStringKey($value)
-                                ]
-                            ];
-                        }
-                        $result[] = (object) [
-                            'key' => $key,
-                            'value' => $value
-                        ];
-                    }
-                    break;
-                case 2:
-                    if (!count($keyValue[1])) {
-                        $value = null;
-                    }
-                    elseif ($keyValue[1][0]->type === self::RECTANGULAR_TYPE) {
-                        if (count($keyValue[1]) > 1) {
-                            throw new \Exception('');
-                        }
-                        $value = $this->getSelectBlock($keyValue[1]);
-                    }
-                    else {
-                        $value = $keyValue[1];
-                    }
-                    if ($value !== null || count($keyValue[0])) {
-                        $result[] = (object) [
-                            'key' => count($keyValue[0]) ? $keyValue[0] : null,
-                            'value' => $value
-                        ];
-                    }
-                    break;
-                default:
-                    throw new \Exception('');
-            }
-        }
-        return $result;
-    }
-
-    /**
-     * @param string $type
-     * @param array $structure
-     *
-     * @return object[]
-     */
-    private function getBlock($type, array $structure)
-    {
-        return call_user_func([$this, 'get' . ucfirst($type) . 'Block'], $structure);
-    }
-
-    /**
-     * @param array $structure
-     * @param int $pos
-     * @return object|null
-     * @throws \Exception
-     */
-    private function getNextBlock(array $structure, &$pos = 0)
-    {
-        if (!isset($structure[$pos])) {
-            return null;
-        }
-        $first = $structure[$pos];
-        if ($first->type !== self::WORD_TYPE) {
-            throw new \Exception('');
-        }
-        $types = self::getPartsBlockTypes();
-        if (!isset($types[$first->value])) {
-            throw new \Exception('');
-        }
-        $type = $first->value . implode('', $types[$first->value]);
-        $pos++;
-        foreach ($types[$first->value] as $num => $part) {
-            if (!isset($structure[$pos])) {
-                return null;
-            }
-            if ($structure[$pos]->type !== self::WORD_TYPE
-                || $structure[$pos]->value !== $part
-            ) {
-                break;
-            }
-            $pos++;
-        }
-        $subStructure = [];
-        for (; $pos < count($structure); $pos++) {
-            if ($structure[$pos]->type === self::WORD_TYPE
-                && isset($types[$structure[$pos]->value])
-            ) {
-                return (object)[
-                    'type' => $type,
-                    'value' => $this->getBlock($type, $subStructure)
-                ];
-            }
-            $subStructure[] = $structure[$pos];
-        }
-        return (object)[
-            'type' => $type,
-            'value' => $this->getBlock($type, $subStructure)
-        ];
-    }
-
-    private static function getPartsBlockTypes()
-    {
-        static $result;
-        if (!$result) {
-            $blockTypes = [
-                'from', 'join', 'left join', 'right join', 'correlate',
-                'select', 'update', 'delete', 'insert',
-                'where', 'having', 'on',
-                'order by', 'group by',
-            ];
-            $result = [];
-            foreach ($blockTypes as $type) {
-                $parts = explode(' ', $type);
-                $key = array_shift($parts);
-                $partsBlockTypes[$key] = $parts;
-            }
-        }
-        return $result;
-    }
-
-    /**
-     * @param array $structure
-     * @return object[]
-     * @throws \Exception
-     */
-    private function analyzeQuery(array $structure)
-    {
-        $blocks = [];
-        while ($block = $this->getNextBlock($structure, $pos)) {
-            $blocks[] = $block;
-        }
-        return $blocks;
-    }
-
     private function analyzeSubQuery(array $structure)
     {
 
@@ -565,15 +339,29 @@ class SQL
 
     /**
      * @param Raw $raw
-     * @param Chain $parent
+     * @param Link $parent
      *
-     * @retur array
+     * @return Link[]
+     * @throws \Exception
      */
-    private function chainToArray(Raw $raw, Chain $parent)
+    private function chainToArray(Raw $raw, Link $parent)
     {
-        //TODO raw string to array of chain
-        $objects = $raw->parse();
-
-
+        return RawToSequence::getQueryBlock($raw);
+        /**
+        case 'from':
+        case 'delete':
+        case 'join':
+        case 'left':
+        case 'leftjoin':
+        case 'right':
+        case 'rightjoin':
+        case 'union':
+        case 'correlate':
+        case 'query':
+        case 'outer':
+        case 'outerjoin':
+        case 'inner':
+        case 'innerjoin':
+         */
     }
 }

@@ -23,7 +23,7 @@ trait SequenceTrait
         if (!isset($this->sequence[$name])) {
             throw new \Exception('invalid sequence');
         }
-        $this->structure[] = new Chain(
+        $this->structure[] = new Link(
             $name,
             $args,
             $is_method
@@ -74,7 +74,7 @@ trait SequenceTrait
     {
         $topology = new Topology($this->structure);
         if (method_exists($this, 'chainToArray')) {
-            $callback = function($object, Chain $parent) {
+            $callback = function($object, Link $parent) {
                 return $this->chainToArray($object, $parent);
             };
         }

@@ -1,5 +1,10 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
+use EugeneErg\SQLPreprocessor\Parsers\Special;
+use EugeneErg\SQLPreprocessor\Raw\Item;
+use EugeneErg\SQLPreprocessor\Raw\Items;
+
 /**
  * Class Raw
  * @package EugeneErg\SQLPreprocessor
@@ -8,37 +13,26 @@ class Raw
 {
     use HashesTrait;
 
-    const STRING_TYPE = 'string';
-    const PARENTHESIS_TYPE = 'parenthesis';
-    const RECTANGULAR_TYPE = 'rectangular';
-    const VARIABLE_TYPE = 'variable';
-    const CONTEXT_TYPE = 'context';
-    const SQLVAR_TYPE = 'sql_var';
-    const NUMBER_TYPE = 'number';
-    const WORD_TYPE = 'word';
-    const METHOD_TYPE = 'method';
-    const FIELD_TYPE = 'field';
-
     /**
      * @var string[]
      */
     private static $firstPatterns = [
-        self::VARIABLE_TYPE => '\\$[0-9a-f]{32}\\$',
-        self::SQLVAR_TYPE => '@[\\w\\.]*',
-        self::NUMBER_TYPE => '\\b(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[Ee][+-]?\\d+)?\\b',
-        self::METHOD_TYPE => '\\.\\s*[a-zA-Z_]\\w*\\b',
-        self::WORD_TYPE => '\\b\\w+\\b',
-        self::STRING_TYPE => "'(?:[^']*(?:'')*)+'|" . '"(?:[^"]*(?:"")*)+"',
-        self::FIELD_TYPE => '(?:\\.\\s*)?`(?:[^`]*(?:``)*)+`',
-        self::CONTEXT_TYPE => ',|:|[+-]*|[^\\[\\]\\(\\)\\w\\s\'",:+-]+'
+        Item::TYPE_VARIABLE => '\\$[0-9a-f]{32}\\$',
+        Item::TYPE_SQL_VAR => '@[\\w\\.]*',
+        Item::TYPE_NUMBER => '\\b(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[Ee][+-]?\\d+)?\\b',
+        Item::TYPE_METHOD => '\\.\\s*[a-zA-Z_]\\w*\\b',
+        Item::TYPE_WORD => '\\b\\w+\\b',
+        Item::TYPE_STRING => "'(?:[^']*(?:'')*)+'|" . '"(?:[^"]*(?:"")*)+"',
+        Item::TYPE_FIELD => '(?:\\.\\s*)?`(?:[^`]*(?:``)*)+`',
+        Item::TYPE_CONTEXT => ',|;|:|[<>=]+|[+-]+|!+|[^\\[\\]\\(\\)\\w\\s\'"+-,;:<>=]+',//test it -= +=
     ];
 
     /**
      * @var string[]
      */
     private static $patterns = [
-        self::PARENTHESIS_TYPE => "\\[[^'\"\]\\[]*\\]",
-        self::RECTANGULAR_TYPE => "\\([^'\"\)\\(]*\\)",
+        Item::TYPE_PARENTHESIS => "\\[[^'\"\]\\[]*\\]",
+        Item::TYPE_RECTANGULAR => "\\([^'\"\)\\(]*\\)",
     ];
 
     /**
@@ -47,11 +41,21 @@ class Raw
     private $string;
 
     /**
+     * @var ParserAbstract
+     */
+    private $parser;
+
+    /**
      * Query constructor.
      * @param string $string
+     * @param string $parser
      */
-    public function __construct($string)
+    public function __construct($string, $parser = Special::class)
     {
+        if (!is_subclass_of($parser, ParserAbstract::class)) {
+            throw ParseException::incorrectParserClass($parser);
+        }
+        $this->parser = $parser;
         $this->string = $string;
         $this->hash = Hasher::getHash($this);
     }
@@ -65,20 +69,20 @@ class Raw
     private function getValue($type, $value)
     {
         switch ($type) {
-            case self::STRING_TYPE:
+            case Item::TYPE_STRING:
                 return str_replace($value[0] . $value[0], $value[0], substr($value, 1, -1));
-            case self::PARENTHESIS_TYPE:
-            case self::RECTANGULAR_TYPE:
+            case Item::TYPE_PARENTHESIS:
+            case Item::TYPE_RECTANGULAR:
                 return [];
-            case self::VARIABLE_TYPE:
+            case Item::TYPE_VARIABLE:
                 return Hasher::getObject($value);
-            case self::METHOD_TYPE:
+            case Item::TYPE_METHOD:
                 return trim(substr($value, 1));
-            case self::CONTEXT_TYPE:
+            case Item::TYPE_CONTEXT:
                 return preg_split('/\\s+/', strtolower(trim($value)));
-            case self::WORD_TYPE:
+            case Item::TYPE_WORD:
                 return strtolower($value);
-            case self::FIELD_TYPE:
+            case Item::TYPE_FIELD:
                 if ($value[0] === '.') {
                     return '.' . trim(substr($value, 1));
                 }
@@ -90,7 +94,7 @@ class Raw
     /**
      * @param array $patterns
      * @param string $string
-     * @return object[]
+     * @return Item[]
      */
     private function getIteration(array $patterns, &$string)
     {
@@ -104,11 +108,11 @@ class Raw
         foreach ($matches as $typeNumber => $variants) {
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
-                    $results[$variant[1]] = (object) [
-                        'type' => $types[$typeNumber - 1],
-                        'size' => strlen($variant[0]),
-                        'value' => $this->getValue($types[$typeNumber - 1], $variant[0]),
-                    ];
+                    $results[$variant[1]] = new Item(
+                        $this->getValue($types[$typeNumber - 1], $variant[0]),
+                        $types[$typeNumber - 1]
+                    );
+                    $results[$variant[1]]->size = strlen($variant[0]);
                     $string = substr_replace(
                         $string, str_repeat(' ', $results[$variant[1]]->size),
                         $variant[1], $results[$variant[1]]->size
@@ -120,22 +124,22 @@ class Raw
     }
 
     /**
-     * @param array $blocks
+     * @param Item[] $items
      * @param int|null $size
      * @param int $pos
-     * @return object[]
+     * @return Item[]
      */
-    private function getStructure(array $blocks, $size, $pos = -1)
+    private function getStructure(array $items, $size, $pos = -1)
     {
         $result = [];
         for ($i = $pos + 1; $i < $pos + $size - 1; ) {
-            if (!isset($blocks[$i])) {
+            if (!isset($items[$i])) {
                 $i++;
                 continue;
             }
-            $block = $blocks[$i];
-            if ($block->type === self::RECTANGULAR_TYPE || $block->type === self::PARENTHESIS_TYPE) {
-                $block->value = $this->getStructure($blocks, $block->size, $i);
+            $block = $items[$i];
+            if ($block->is(Item::TYPE_RECTANGULAR, Item::TYPE_PARENTHESIS)) {
+                $block->setChildren(new Items($this->getStructure($items, $block->size, $i)));
             }
             $result[] = $block;
             unset($block->size);
@@ -145,9 +149,10 @@ class Raw
     }
 
     /**
-     * @return object[]
+     * @param string $type
+     * @return Link[]
      */
-    public function parse()
+    public function parse($type = ParserAbstract::TYPE_QUERY)
     {
         $string = $this->string;
         $result = $this->getIteration(self::$firstPatterns, $string);
@@ -157,6 +162,10 @@ class Raw
             $results[] = $result;
         }
 
-        return $this->getStructure(call_user_func_array('array_replace', $results), strlen($string) + 2);
+        $parser = $this->parser;
+        return $parser::getSequence(
+            new \Items($this->getStructure(call_user_func_array('array_replace', $results), strlen($string) + 2)),
+            $type
+        );
     }
 }
