@@ -8,6 +8,9 @@ use EugeneErg\SQLPreprocessor\Raw;
  */
 class Items implements \ArrayAccess, \Countable
 {
+    const POS_FLAG_NOT_MATCH = 1;
+    const POS_FLAG_LOWER_CASE = 2;
+    const POS_FLAG_UPPER_CASE = 6;
     /**
      * @var Item[]
      */
@@ -143,45 +146,89 @@ class Items implements \ArrayAccess, \Countable
         return count($this->items);
     }
 
+    private function transformCase($value, $type)
+    {
+        if (is_null($type) || !is_string($value)) {
+            return $value;
+        }
+        if ($type) {
+            return strtoupper($value);
+        }
+        return strtolower($value);
+    }
+
+    private function getCaseTransform($flags)
+    {
+        switch ($flags & self::POS_FLAG_UPPER_CASE) {
+            case self::POS_FLAG_UPPER_CASE: return true;
+            case self::POS_FLAG_LOWER_CASE: return false;
+            default: return null;
+        }
+    }
+
     /**
-     * @param string|array $context
+     * @param string|array|\Closure $context
      * @param int $offset
-     * @param bool $in
+     * @param int $flags
      * @return int|null
      */
-    public function pos($context, $offset = 0, $in = true)
+    public function pos($context, $offset = 0, $flags = 0)
     {
-        $search = [];
-        foreach ((array) $context as $type => $subjects) {
-            if (is_int($type)) {
-                $type = Item::TYPE_CONTEXT;
-            }
-            if (is_null($subjects)) {
-                $search[$type] = null;
-            }
-            else {
-                foreach ((array)$subjects as $subject) {
-                    $search[$type][] = $subject;
+        $caseTransform = $this->getCaseTransform($flags);
+        $notMatch = $flags & self::POS_FLAG_NOT_MATCH === self::POS_FLAG_NOT_MATCH;
+        if (!$context instanceof \Closure) {
+            $search = [];
+            foreach ((array) $context as $type => $subjects) {
+                if (is_int($type)) {
+                    $type = Item::TYPE_CONTEXT;
+                }
+                if (is_null($subjects)) {
+                    $search[$type] = null;
+                }
+                else {
+                    foreach ((array)$subjects as $subject) {
+                        $search[$type][] = $this->transformCase($subject, $caseTransform);
+                    }
                 }
             }
+            $context = function($value, $type) use($search) {
+                return array_key_exists($type, $search)
+                    && ($search[$type] === null || in_array($value, $search[$type]));
+            };
         }
         for ($i = $offset; $i < $this->count(); $i++) {
-            foreach ($search as $type => $values) {
-                if (($this[$i]->is($type)
-                    && (is_null($values) || in_array($this[$i]->getValue(), $values))) === $in
-                ) {
-                    return $i;
-                }
+            if ($context(
+                    $this->transformCase($this[$i]->getValue(), $caseTransform),
+                    $this[$i]->getType()
+                ) !== $notMatch
+            ) {
+                return $i;
             }
         }
         return null;
     }
 
+    /**
+     * @param int $offset
+     * @param int $length
+     * @param Items|null $replacement
+     * @return Items
+     */
     public function splice($offset = 0, $length = 0, self $replacement = null)
     {
         return new self(array_splice(
             $this->items, $offset, $length, $replacement ? $replacement->items : []
         ));
+    }
+
+    /**
+     * @param int $offset
+     * @param int|null $length
+     * @return Items
+     */
+    public function slice($offset = 0, $length = null)
+    {
+        return new self(array_slice($this->items, $offset, $length));
     }
 
     /**

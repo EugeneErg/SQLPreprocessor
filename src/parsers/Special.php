@@ -2,7 +2,6 @@
 
 use EugeneErg\SQLPreprocessor\Link;
 use EugeneErg\SQLPreprocessor\ParseException;
-use EugeneErg\SQLPreprocessor\Query;
 use EugeneErg\SQLPreprocessor\Raw;
 use EugeneErg\SQLPreprocessor\Variable;
 
@@ -218,6 +217,8 @@ class Special extends ParserAbstract
     public static function getHavingSequence(Raw\Items $items)
     {
         // TODO: Implement getHavingSequence() method.
+
+
     }
 
     /**
@@ -282,11 +283,27 @@ class Special extends ParserAbstract
     }
 
     /**
+     * @param Raw\Items $items
+     * @param int $pos
+     * @return int|null
+     */
+    private static function geNextBlock(Raw\Items $items, $pos = 0)
+    {
+        return $items->pos([Raw\Item::TYPE_WORD => [
+            'UPDATE', 'DELETE', 'INSERT', 'SELECT',
+            'ORDER', 'GROUP',
+            'HAVING', 'ON', 'WHERE', 'USING',
+            'FROM', 'LEFT', 'JOIN', 'RIGHT', 'INNER', 'OUTER', 'CORRELATE', 'UNION',
+            'LIMIT','OFFSET', 'DISTINCT',
+        ]], $pos, Raw\Items::POS_FLAG_UPPER_CASE);
+    }
+
+    /**
      * @inheritDoc
      */
     public static function getQuerySequence(Raw\Items $items)
     {
-        // TODO: Implement getQuerySequence() method.
+        return self::getQuery($items)->sequence;
     }
 
     /**
@@ -368,12 +385,13 @@ class Special extends ParserAbstract
     public static function getWhereSequence(Raw\Items $items)
     {
         // TODO: Implement getWhereSequence() method.
+        return $items->getRawValue();
     }
 
     private static function getDefaultWithCallback(Raw\Items $items, \Closure $callback)
     {
         $result = [];
-        $return = new Raw\Items();
+        $return = [];
         for ($num = 0; $num < count($items); $num++) {
             $item = $items[$num];
             if ($item->is(Raw\Item::TYPE_WORD)) {
@@ -388,8 +406,8 @@ class Special extends ParserAbstract
                             throw ParseException::incorrectLink($item);
                         }
                         if (count($return)) {
-                            $result = array_merge($result, $callback($return));
-                            $return = new Raw\Items();
+                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $return = [];
                         }
                         $result[] = new Link($item->getValue(), [
                             $items[$num + 1]->getRawValue()
@@ -403,8 +421,8 @@ class Special extends ParserAbstract
                             throw ParseException::ewfer(':');
                         }
                         if (count($return)) {
-                            $result = array_merge($result, $callback($return));
-                            $return = new Raw\Items();
+                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $return = [];
                         }
                         $result[] = new Link($item->getValue(), [
                             $items->splice($num + 1, $pos - $num - 1)->getRawValue()
@@ -416,8 +434,8 @@ class Special extends ParserAbstract
                     case 'endif':
                     case 'endswitch'://WORD
                         if (count($return)) {
-                            $result = array_merge($result, $callback($return));
-                            $return = new Raw\Items();
+                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $return = [];
                         }
                         $result[] = new Link($item->getValue());
                         break;
@@ -430,7 +448,7 @@ class Special extends ParserAbstract
             }
         }
         if (count($return)) {
-            $result = array_merge($result, $callback($return));
+            $result = array_merge($result, $callback(new Raw\Items($return)));
         }
         return $result;
     }
@@ -443,5 +461,198 @@ class Special extends ParserAbstract
                 true
             )];
         });
+    }
+
+    public static function getUpdateSequence(Raw\Items $items)
+    {
+        return self::getSelectSequence($items);
+    }
+
+    private static function getTableVariable(Raw\Items $items)
+    {
+        if (!count($items)) {
+            throw ParseException::incorrectCountArguments(0, 1);
+        }
+        if ($items[0]->is(Raw\Item::TYPE_VARIABLE)) {
+            if (count($items) !== 1) {
+                throw ParseException::incorrectCountArguments(count($items), 1, 1);
+            }
+            $variable = $items[0]->getValue();
+            if (Variable::getObject($variable))
+        }
+        foreach ()
+    }
+
+    private static function getQuery(Raw\Items $items)
+    {
+        //limit offset distinct...
+
+        /**
+         * Допустимо:
+         *
+         * select *
+         * from union(
+         *  select //правила объединения
+         *  from `table`
+         * on//условия выборки
+         *  from union ()
+         *  from `table
+         * where//условия объединения
+         * )
+         *
+         * join внутри Union не допустимо
+         */
+
+        $result = (object) [
+            'limit' => [],
+            'distinct' => false,
+            'sequence' => []
+        ];
+
+        $pos = self::geNextBlock($items);
+        if ($pos !== 0) {
+            throw ParseException::qwe();
+        }
+        $item = $items[0];
+        while (count($items)) {
+            $blockName = strtolower($item->getValue());
+            switch ($blockName) {
+                case 'left':
+                case 'right':
+                case 'inner'://intersect
+                case 'outer'://except
+                    if (isset($items[1])
+                        && $items[1]->is(Raw\Item::TYPE_WORD)
+                        && strtolower($items[1]->getValue()) === 'join'
+                    ) {
+                        unset($items[1]);
+                    }
+                case 'from':
+                case 'join'://inner
+                case 'correlate':
+                case 'union'://from , , , ,
+                    if ($blockName === 'union') {
+                        $blockName = 'from';
+                        $is_union = true;
+                    }
+                    elseif (isset($items[1])
+                        && $items[1]->is(Raw\Item::TYPE_WORD)
+                        && strtolower($items[1]->getValue()) === 'union'
+                    ) {
+                        unset($items[1]);
+                        $is_union = true;
+                    }
+                    else {
+                        $is_union = false;
+                    }
+                    if ($blockName === 'join') {
+                        $blockName = 'inner';
+                    }
+
+                    $pos = self::geNextBlock($items);
+                    unset($items[0]);
+                    $part = $items->splice(0, $pos - 1);
+                    $parts = $part->explode(',');
+                    foreach ($parts as $part) {
+                        if (!count($part)) {
+                            continue;
+                        }
+                        if ($part[0]->is(Raw\Item::TYPE_PARENTHESIS)) {
+                            $query = self::getQuery($part[0]->getValue());
+                            unset($part[0]);
+                        }
+                        else {
+                            $query = null;
+                        }
+                        $variable = self::getTableVariable($part);
+
+
+
+
+
+                        $result->sequence[] = new Link('query', [$variable, [
+                            'type' => $blockName,
+                            'is_union' => $is_union,
+                            'limit' =>
+
+                        ]], true);
+
+
+                    }
+                    break;
+                case 'having':
+                case 'on':
+                case 'where':
+                case 'using':
+                    $pos = self::geNextBlock($items);
+                    unset($items[0]);
+                    $part = $items->splice(0, $pos - 1);
+                    $result->sequence[] = new Link($blockName, self::getWhereSequence($part), true);
+                    break;
+                case 'order':
+                case 'group':
+                    if (isset($items[1])
+                        && $items[1]->is(Raw\Item::TYPE_WORD)
+                        && strtoupper($items[1]->getValue()) === 'BY'
+                    ) {
+                        unset($items[1]);
+                    }
+                    $blockName = $blockName . 'By';
+                case 'update':
+                case 'select':
+                case 'delete':
+                case 'insert':
+                case 'limit':
+                case 'distinct':
+                    $pos = self::geNextBlock($items);
+                    unset($items[0]);
+                    $part = $items->splice(0, $pos - 1);
+                    $result->sequence[] = new Link($blockName);
+                    $method = ucfirst($blockName);
+                    if (in_array($blockName, ['limit', 'distinct'])) {
+                        $result->{$blockName} = call_user_func([self::class, "get{$method}Sequence"], $part);
+                    }
+                    else {
+                        $result->sequence[] = array_merge(
+                            $result->sequence, call_user_func([self::class, "get{$method}Sequence"], $part)
+                        );
+                    }
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected static function getLimitSequence(Raw\Items $items)
+    {
+        $parts = $items->explode(',');
+        $result = [];
+        switch (count($parts)) {
+            case 1:
+            case 2:
+                foreach ($parts as $part) {
+                    if (count($part) !== 1) {
+                        throw ParseException::incorrectCountArguments(count($part), 1, 1);
+                    }
+                    $result[] = $part[0]->getValue();
+                }
+                break;
+            default:
+                throw ParseException::incorrectCountArguments(count($parts), 1, 1);
+        }
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected static function getDistinctSequence(Raw\Items $items)
+    {
+        if (count($items)) {
+            throw ParseException::incorrectCountArguments(count($items), 0, 0);
+        }
+        return true;
     }
 }

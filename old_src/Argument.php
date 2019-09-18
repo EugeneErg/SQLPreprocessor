@@ -29,7 +29,7 @@ final class Argument {
                 if ($this->value instanceof Variable) {
                     return $this->type = Self::IS_VARIABLE;
                 }
-                elseif ($this->value instanceof SQL) {
+                elseif ($this->value instanceof Query) {
                     return $this->type = Self::IS_FUNCTION;
                 }
                 elseif ($this->value instanceof Field) {

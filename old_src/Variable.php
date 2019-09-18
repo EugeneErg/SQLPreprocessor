@@ -65,7 +65,7 @@ final class Variable
             throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
         }
         $this->setKeys((array)$keys);
-        if ($nameOrValue instanceof SQL) {
+        if ($nameOrValue instanceof Query) {
             $this->type = Self::IS_SUBQUERY;
             $this->query = $nameOrValue;
         } elseif (is_array($nameOrValue)) {
@@ -148,7 +148,7 @@ final class Variable
 
     public function __call($name, $args)
     {
-        return call_user_func_array([SQL::from($this, $this), $name], $args);
+        return call_user_func_array([Query::from($this, $this), $name], $args);
     }
 
     public function __invoke($variable)
@@ -157,8 +157,8 @@ final class Variable
         if ($variable instanceof Self
             && $variable->getTableVar() === $context
         ) {
-            return SQL::from($variable);
+            return Query::from($variable);
         }
-        return SQL::from($context, $variable);
+        return Query::from($context, $variable);
     }
 }

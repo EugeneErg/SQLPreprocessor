@@ -20,7 +20,7 @@ abstract class ParserAbstract
     const TYPE_OUTER_JOIN = 'query';
     const TYPE_SELECT = 'select';
     const TYPE_DELETE = 'delete';
-    const TYPE_UPDATE = 'select';
+    const TYPE_UPDATE = 'update';
     const TYPE_INSERT = 'select';
     const TYPE_ORDER_BY = 'order by';
     const TYPE_GROUP_BY = 'group by';
@@ -113,6 +113,26 @@ abstract class ParserAbstract
      * @return Link[]
      */
     abstract public static function getDefaultSequence(Raw\Items $items);
+
+    /**
+     * @param Raw\Items $items
+     * @return Link[]
+     */
+    abstract public static function getUpdateSequence(Raw\Items $items);
+
+    /**
+     * @param Raw\Items $items
+     * @return Link[]
+     */
+    abstract protected static function getLimitSequence(Raw\Items $items);
+
+    /**
+     * @param Raw\Items $items
+     * @return Link[]
+     */
+    abstract protected static function getDistinctSequence(Raw\Items $items);
+
+
 
     /**
      * @param string $string

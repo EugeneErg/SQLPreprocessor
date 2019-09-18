@@ -57,7 +57,7 @@ class Variable implements \ArrayAccess
     }
 
     /**
-     * @return array
+     * @return Link[]
      */
     private function getSequence()
     {
