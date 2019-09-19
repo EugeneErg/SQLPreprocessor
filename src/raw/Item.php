@@ -12,7 +12,7 @@ class Item
     const TYPE_STRING = 'string';
     const TYPE_PARENTHESIS = 'parenthesis';
     const TYPE_RECTANGULAR = 'rectangular';
-    const TYPE_VARIABLE = 'variable';
+    const TYPE_RECORD = 'record';
     const TYPE_CONTEXT = 'context';
     const TYPE_SQL_VAR = 'sql_var';
     const TYPE_NUMBER = 'number';

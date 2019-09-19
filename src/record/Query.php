@@ -9,6 +9,11 @@ class Query extends AbstractRecord
      */
     private $useRecords = [];
 
+    public static function create()
+    {
+        return self::createContainer();
+    }
+
     /**
      * @param  $record
      */

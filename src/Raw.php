@@ -17,7 +17,7 @@ class Raw
      * @var string[]
      */
     private static $firstPatterns = [
-        Item::TYPE_VARIABLE => '\\$[0-9a-f]{32}\\$',
+        Item::TYPE_RECORD => '\\$[0-9a-f]{32}\\$',
         Item::TYPE_SQL_VAR => '@[\\w\\.]*',
         Item::TYPE_NUMBER => '\\b(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[Ee][+-]?\\d+)?\\b',
         Item::TYPE_METHOD => '\\.\\s*[a-zA-Z_]\\w*\\b',
@@ -74,7 +74,7 @@ class Raw
             case Item::TYPE_PARENTHESIS:
             case Item::TYPE_RECTANGULAR:
                 return [];
-            case Item::TYPE_VARIABLE:
+            case Item::TYPE_RECORD:
                 return Hasher::getObject($value);
             case Item::TYPE_METHOD:
                 return trim(substr($value, 1));
@@ -164,7 +164,7 @@ class Raw
 
         $parser = $this->parser;
         return $parser::getSequence(
-            new \Items($this->getStructure(call_user_func_array('array_replace', $results), strlen($string) + 2)),
+            new Items($this->getStructure(call_user_func_array('array_replace', $results), strlen($string) + 2)),
             $type
         );
     }

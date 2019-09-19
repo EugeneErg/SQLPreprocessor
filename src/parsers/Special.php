@@ -3,7 +3,10 @@
 use EugeneErg\SQLPreprocessor\Link;
 use EugeneErg\SQLPreprocessor\ParseException;
 use EugeneErg\SQLPreprocessor\Raw;
-use EugeneErg\SQLPreprocessor\Variable;
+use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
+use EugeneErg\SQLPreprocessor\Record\Item;
+use EugeneErg\SQLPreprocessor\Record\Query;
+use EugeneErg\SQLPreprocessor\Record\Table;
 
 /**
  * Class Special
@@ -52,13 +55,13 @@ class Special extends ParserAbstract
                     }
                     elseif (isset($items[$num + 1]) && $items[$num + 1]->is(Raw\Item::TYPE_PARENTHESIS)) {
                         $activeItem = call_user_func_array(
-                            [new Variable(), $item->getValue()],
+                            [Query::create(), $item->getValue()],
                             self::getArgumentSequence($items[$num + 1]->getValue())
                         );
                         $num++;
                     }
                     else {
-                        $activeItem = (new Variable())->{$item->getValue()};
+                        $activeItem = Query::create()->{$item->getValue()};
                     }
                     break;
                 case Raw\Item::TYPE_PARENTHESIS://могут иметь методы
@@ -66,7 +69,7 @@ class Special extends ParserAbstract
                     if ($activeItem) {
                         $arguments[] = $activeItem;
                     }
-                    $activeItem = new Variable($item);
+                    $activeItem = Item::create($item);
                     break;
                 case Raw\Item::TYPE_CONTEXT:
                     if ($activeItem) {
@@ -100,26 +103,21 @@ class Special extends ParserAbstract
                         }
                         $fields = self::getFields($items, $num + 1);
                         if (count($fields) > 1) {
-                            $activeItem = new Variable((object) [
-                                'base' => str_replace('``', '`',
-                                    substr($item->getValue(), 1, -1)
-                                ),
-                                'table' => $fields[0]
-                            ]);
+                            $activeItem = Table::create($fields[0],
+                                str_replace('``', '`', substr($item->getValue(), 1, -1))
+                            );
                             $num++;
                         }
                         else {
-                            $activeItem = new Variable(
-                                str_replace('``', '`',
-                                    substr($item->getValue(), 1, -1)
-                                )
-                            );
+                            $activeItem = Table::create(str_replace('``', '`',
+                                substr($item->getValue(), 1, -1)
+                            ));
                         }
                     }
                     break;
                 case Raw\Item::TYPE_RECTANGULAR:
                     if (!$activeItem) {
-                        $arguments[] = new Variable($item->getValue());
+                        $arguments[] = Item::create($item);
                     }
                     elseif (isset($items[$num + 1]) && $items[$num + 1]->is(Raw\Item::TYPE_PARENTHESIS)) {
                         $activeItem = call_user_func_array(
@@ -153,7 +151,7 @@ class Special extends ParserAbstract
                     }
                     $arguments[] = $item->getValue();
                     break;
-                case Raw\Item::TYPE_VARIABLE:
+                case Raw\Item::TYPE_RECORD:
                     if ($activeItem) {
                         $arguments[] = $activeItem;
                     }
@@ -185,8 +183,8 @@ class Special extends ParserAbstract
                 default: throw ParseException::incorrectCountArguments(count($part), 0, 1);
             }
             $firstItem = reset($chain);
-            if (!$firstItem->is(Raw\Item::TYPE_VARIABLE)
-                || count(Variable::getSequence($firstItem->getValue()))
+            if (!$firstItem->is(Raw\Item::TYPE_RECORD)
+                || count(AbstractRecord::getRecord($firstItem->getValue())->getSequence())
             ) {
                 throw ParseException::incorrectLink($firstItem);
             }
@@ -340,7 +338,7 @@ class Special extends ParserAbstract
                     throw ParseException::incorrectCountArguments(count($arguments[0]), 1, 1);
                 }
                 $field = $arguments[0][0];
-                if ($field->is(Raw\Item::TYPE_VARIABLE)) {
+                if ($field->is(Raw\Item::TYPE_RECORD)) {
                     throw ParseException::incorrectLink($field);
                 }
                 unset($arguments[0]);
@@ -473,14 +471,14 @@ class Special extends ParserAbstract
         if (!count($items)) {
             throw ParseException::incorrectCountArguments(0, 1);
         }
-        if ($items[0]->is(Raw\Item::TYPE_VARIABLE)) {
+        if ($items[0]->is(Raw\Item::TYPE_RECORD)) {
             if (count($items) !== 1) {
                 throw ParseException::incorrectCountArguments(count($items), 1, 1);
             }
             $variable = $items[0]->getValue();
-            if (Variable::getObject($variable))
+            //if (AbstractRecord::getRecord($variable))
         }
-        foreach ()
+        //foreach ()
     }
 
     private static function getQuery(Raw\Items $items)
@@ -573,8 +571,7 @@ class Special extends ParserAbstract
                         $result->sequence[] = new Link('query', [$variable, [
                             'type' => $blockName,
                             'is_union' => $is_union,
-                            'limit' =>
-
+                            //'limit' =>
                         ]], true);
 
 
