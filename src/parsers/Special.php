@@ -235,8 +235,8 @@ class Special extends ParserAbstract
         // TODO: Implement getOrderBySequence() method.
         /**
          * ->orderBy->{
-         *   Query::if(condition)->{
-         *      Query::return($var->field, asc)
+         *   Builder::if(condition)->{
+         *      Builder::return($var->field, asc)
          *   }
          *   ->return($var->field_2, desc)
          *
@@ -320,9 +320,9 @@ class Special extends ParserAbstract
          *
          *
          * ->select->{
-         *     Query::return($var->field_1, 'value')->
+         *     Builder::return($var->field_1, 'value')->
          *     if (new \Raw("condition"))->{
-         *         Query::return($var->field_2, 'value_2')
+         *         Builder::return($var->field_2, 'value_2')
          *     }
          * }
          */

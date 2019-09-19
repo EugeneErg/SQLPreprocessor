@@ -1,7 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
 /**
- * Class Query
+ * Class Builder
  * @package EugeneErg\SQLPreprocessor
  *
  * @property $this $else
@@ -27,7 +27,7 @@
  * @method $this case(mixed $argument)
  * @method $this var(mixed $argument)
  */
-class Query
+class Builder
 {
     use SequenceTrait;
 

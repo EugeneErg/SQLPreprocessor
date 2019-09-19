@@ -46,7 +46,7 @@ class Raw
     private $parser;
 
     /**
-     * Query constructor.
+     * Builder constructor.
      * @param string $string
      * @param string $parser
      */

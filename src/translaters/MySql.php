@@ -2,7 +2,7 @@
 
 use EugeneErg\SQLPreprocessor\SQLFunction;
 use EugeneErg\SQLPreprocessor\Translater;
-use EugeneErg\SQLPreprocessor\Query;
+use EugeneErg\SQLPreprocessor\Builder;
 use EugeneErg\SQLPreprocessor\Field;
 use EugeneErg\SQLPreprocessor\Variable;
 use EugeneErg\SQLPreprocessor\Argument;
@@ -260,7 +260,7 @@ class MySql extends Translater {
                 return '`' . $include->query->getIndex() . '`.`' .$include->field . '`';
         }
     }
-    protected function getQuery(Query $query, array $fields = null) {
+    protected function getQuery(Builder $query, array $fields = null) {
         $parentQuery = $this->query;
         $parentType = $this->type;
         $this->query = $query;
