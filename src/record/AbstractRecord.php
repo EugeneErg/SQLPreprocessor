@@ -81,6 +81,7 @@ abstract class AbstractRecord
     private static function getTree(array $branches)
     {
         //todo
+        return [];
     }
 
     /**
@@ -101,8 +102,8 @@ abstract class AbstractRecord
     }
 
     /**
-     * @param array $path
-     * @param array $sequence
+     * @param Container[] $path
+     * @param Link[] $sequence
      * @param mixed $object
      */
     private static function addAssociate(array $path, array $sequence, $object = null)
@@ -154,5 +155,10 @@ abstract class AbstractRecord
             $root
         );
         return self::$records[$container]->self;
+    }
+
+    public function getContainer()
+    {
+        return $this->container;
     }
 }

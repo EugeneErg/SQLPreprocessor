@@ -12,13 +12,13 @@ class Items implements \ArrayAccess, \Countable
     const POS_FLAG_LOWER_CASE = 2;
     const POS_FLAG_UPPER_CASE = 6;
     /**
-     * @var Item[]
+     * @var ItemAbstract[]
      */
     private $items = [];
 
     /**
      * RawItems constructor.
-     * @param Item[] $items
+     * @param ItemAbstract[] $items
      */
     public function __construct(array $items = [])
     {
@@ -38,7 +38,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @return Item
+     * @return ItemAbstract
      */
     public function offsetGet($offset)
     {
@@ -46,10 +46,10 @@ class Items implements \ArrayAccess, \Countable
     }
 
     /**
-     * @param Item $value
+     * @param ItemAbstract $value
      * @param int|null $offset
      */
-    private function set(Item $value, $offset = null)
+    private function set(ItemAbstract $value, $offset = null)
     {
         if (!isset($offset, $this->items[$offset])) {
             $this->items[] = $value;
@@ -61,7 +61,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @param Item $value
+     * @param ItemAbstract $value
      */
     public function offsetSet($offset, $value)
     {
@@ -76,19 +76,19 @@ class Items implements \ArrayAccess, \Countable
         array_splice($this->items, $offset, 1);
     }
 
-    private function isConnected(Item $current, Item $next)
+    private function isConnected(ItemAbstract $current, ItemAbstract $next)
     {
-        if (!$current->is(Item::TYPE_CONTEXT)) {
+        if (!$current->is(ItemAbstract::TYPE_CONTEXT)) {
             if ($next->is(
-                ITEM::TYPE_WORD, Item::TYPE_NUMBER, Item::TYPE_STRING, Item::TYPE_VARIABLE, Item::TYPE_SQL_VAR)) {
+                ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_NUMBER, ItemAbstract::TYPE_STRING, ItemAbstract::TYPE_VARIABLE, ItemAbstract::TYPE_SQL_VAR)) {
                 return true;
             }
-            if ($next->is(Item::TYPE_FIELD) && $next->getValue()[0] !== '.') {
+            if ($next->is(ItemAbstract::TYPE_FIELD) && $next->getValue()[0] !== '.') {
                 return true;
             }
         }
-        if ($next->is(Item::TYPE_PARENTHESIS)
-            && !$current->is(Item::TYPE_WORD, Item::TYPE_METHOD)
+        if ($next->is(ItemAbstract::TYPE_PARENTHESIS)
+            && !$current->is(ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_METHOD)
         ) {
             return true;
         }
@@ -122,7 +122,7 @@ class Items implements \ArrayAccess, \Countable
         $result = [];
         $partOfChain = [];
         foreach ($this->items as $link) {
-            if ($link->is(Item::TYPE_CONTEXT)
+            if ($link->is(ItemAbstract::TYPE_CONTEXT)
                 && count($result) !== $maxCount - 1
                 && in_array($link->getValue(), (array)$delimiter)
             ) {
@@ -180,7 +180,7 @@ class Items implements \ArrayAccess, \Countable
             $search = [];
             foreach ((array) $context as $type => $subjects) {
                 if (is_int($type)) {
-                    $type = Item::TYPE_CONTEXT;
+                    $type = ItemAbstract::TYPE_CONTEXT;
                 }
                 if (is_null($subjects)) {
                     $search[$type] = null;

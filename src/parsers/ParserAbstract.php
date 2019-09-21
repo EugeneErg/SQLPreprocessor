@@ -18,18 +18,21 @@ abstract class ParserAbstract
     const TYPE_UNION = 'query';
     const TYPE_INNER_JOIN = 'query';
     const TYPE_OUTER_JOIN = 'query';
+
     const TYPE_SELECT = 'select';
     const TYPE_DELETE = 'delete';
     const TYPE_UPDATE = 'update';
-    const TYPE_INSERT = 'select';
+    const TYPE_INSERT = 'insert';
+
     const TYPE_ORDER_BY = 'order by';
     const TYPE_GROUP_BY = 'group by';
     const TYPE_ARGUMENT = 'argument';
-    const TYPE_SET = 'set';
+
     const TYPE_WHERE = 'where';
-    const TYPE_ON = 'on';
+    const TYPE_ON = 'where';
+    const TYPE_HAVING = 'where';
     const TYPE_USING = 'using';
-    const TYPE_HAVING = 'having';
+
     const TYPE_SWITCH = 'default';
     const TYPE_DEFAULT = 'default';
     const TYPE_IF = 'default';
@@ -37,102 +40,74 @@ abstract class ParserAbstract
     const TYPE_ELSEIF = 'default';
 
     /**
-     * @param Raw\Items $items
-     * @return Link[]
+     * @var Raw\Items
      */
-    abstract public static function getQuerySequence(Raw\Items $items);
+    protected $items;
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getSelectSequence(Raw\Items $items);
+    abstract public function getQuerySequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getDeleteSequence(Raw\Items $items);
+    abstract public function getSelectSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getOrderBySequence(Raw\Items $items);
+    abstract public function getDeleteSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getGroupBySequence(Raw\Items $items);
+    abstract public function getOrderBySequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getWhereSequence(Raw\Items $items);
+    abstract public function getGroupBySequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getOnSequence(Raw\Items $items);
+    abstract public function getWhereSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getUsingSequence(Raw\Items $items);
+    abstract public function getUsingSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getUnionSequence(Raw\Items $items);
+    abstract public function getArgumentSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getHavingSequence(Raw\Items $items);
+    abstract public function getDefaultSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getSetSequence(Raw\Items $items);
+    abstract public function getUpdateSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getArgumentSequence(Raw\Items $items);
+    abstract public function getInsertSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getDefaultSequence(Raw\Items $items);
+    abstract protected function getLimitSequence();
 
     /**
-     * @param Raw\Items $items
      * @return Link[]
      */
-    abstract public static function getUpdateSequence(Raw\Items $items);
-
-    /**
-     * @param Raw\Items $items
-     * @return Link[]
-     */
-    abstract protected static function getLimitSequence(Raw\Items $items);
-
-    /**
-     * @param Raw\Items $items
-     * @return Link[]
-     */
-    abstract protected static function getDistinctSequence(Raw\Items $items);
-
-
+    abstract protected function getDistinctSequence();
 
     /**
      * @param string $string
@@ -150,8 +125,12 @@ abstract class ParserAbstract
      * @param string $type
      * @return Link[]
      */
-    public static function getSequence($items, $type = self::TYPE_QUERY)
+    public function getSequence($items, $type = self::TYPE_QUERY)
     {
-        return call_user_func([static::class, 'get' . self::camelCase($type) . 'Sequence'], $items);
+        $prevItems = $this->items;
+        $this->items = $items;
+        $result = $this->{'get' . self::camelCase($type) . 'Sequence'}();
+        $this->items = $prevItems;
+        return $result;
     }
 }

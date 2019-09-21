@@ -62,7 +62,7 @@ final class Variable
     public function __construct($nameOrValue = null, $keys = [])
     {
         if (isset($this->type)) {
-            throw new \Exception('This method is magical and can only be called as "new Variable(...)"');
+            throw new \Exception('This method is magical and can only be called as "new Record(...)"');
         }
         $this->setKeys((array)$keys);
         if ($nameOrValue instanceof Builder) {

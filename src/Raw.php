@@ -2,7 +2,9 @@
 
 use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Parsers\Special;
-use EugeneErg\SQLPreprocessor\Raw\Item;
+use EugeneErg\SQLPreprocessor\Raw\Item\String;
+use EugeneErg\SQLPreprocessor\Raw\Item\StructureItem;
+use EugeneErg\SQLPreprocessor\Raw\Item\ValueItem;
 use EugeneErg\SQLPreprocessor\Raw\Items;
 
 /**
@@ -16,23 +18,8 @@ class Raw
     /**
      * @var string[]
      */
-    private static $firstPatterns = [
-        Item::TYPE_RECORD => '\\$[0-9a-f]{32}\\$',
-        Item::TYPE_SQL_VAR => '@[\\w\\.]*',
-        Item::TYPE_NUMBER => '\\b(?:\\d*\\.\\d+|\\d+\\.?\\d*)(?:[Ee][+-]?\\d+)?\\b',
-        Item::TYPE_METHOD => '\\.\\s*[a-zA-Z_]\\w*\\b',
-        Item::TYPE_WORD => '\\b\\w+\\b',
-        Item::TYPE_STRING => "'(?:[^']*(?:'')*)+'|" . '"(?:[^"]*(?:"")*)+"',
-        Item::TYPE_FIELD => '(?:\\.\\s*)?`(?:[^`]*(?:``)*)+`',
-        Item::TYPE_CONTEXT => ',|;|:|[<>=]+|[+-]+|!+|[^\\[\\]\\(\\)\\w\\s\'"+-,;:<>=]+',//test it -= +=
-    ];
-
-    /**
-     * @var string[]
-     */
-    private static $patterns = [
-        Item::TYPE_PARENTHESIS => "\\[[^'\"\]\\[]*\\]",
-        Item::TYPE_RECTANGULAR => "\\([^'\"\)\\(]*\\)",
+    private static $parsers = [
+        'default' => Special::class
     ];
 
     /**
@@ -48,53 +35,41 @@ class Raw
     /**
      * Builder constructor.
      * @param string $string
-     * @param string $parser
+     * @param ParserAbstract $parser
      */
-    public function __construct($string, $parser = Special::class)
+    public function __construct($string, ParserAbstract $parser = null)
     {
-        if (!is_subclass_of($parser, ParserAbstract::class)) {
-            throw ParseException::incorrectParserClass($parser);
-        }
-        $this->parser = $parser;
+        $this->parser = is_null($parser) ? new self::$parsers['default']() : $parser;
         $this->string = $string;
         $this->hash = Hasher::getHash($this);
     }
 
     /**
-     * @param string $type
-     * @param string $value
-     *
-     * @return mixed
+     * @param $parser
+     * @param array $arguments
+     * @return Raw
      */
-    private function getValue($type, $value)
+    public static function __callStatic($parser, array $arguments)
     {
-        switch ($type) {
-            case Item::TYPE_STRING:
-                return str_replace($value[0] . $value[0], $value[0], substr($value, 1, -1));
-            case Item::TYPE_PARENTHESIS:
-            case Item::TYPE_RECTANGULAR:
-                return [];
-            case Item::TYPE_RECORD:
-                return Hasher::getObject($value);
-            case Item::TYPE_METHOD:
-                return trim(substr($value, 1));
-            case Item::TYPE_CONTEXT:
-                return preg_split('/\\s+/', strtolower(trim($value)));
-            case Item::TYPE_WORD:
-                return strtolower($value);
-            case Item::TYPE_FIELD:
-                if ($value[0] === '.') {
-                    return '.' . trim(substr($value, 1));
-                }
-            default:
-                return $value;
+        return new self($arguments[0], new self::$parsers[$parser]());
+    }
+
+    /**
+     * @param $class
+     * @param $alias
+     */
+    public static function registerParser($class, $alias)
+    {
+        if (!is_subclass_of($class, ParserAbstract::class)) {
+            throw ParseException::incorrectParserClass($class);
         }
+        self::$parsers[$alias] = $class;
     }
 
     /**
      * @param array $patterns
      * @param string $string
-     * @return Item[]
+     * @return object[]
      */
     private function getIteration(array $patterns, &$string)
     {
@@ -108,11 +83,19 @@ class Raw
         foreach ($matches as $typeNumber => $variants) {
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
-                    $results[$variant[1]] = new Item(
-                        $this->getValue($types[$typeNumber - 1], $variant[0]),
-                        $types[$typeNumber - 1]
-                    );
-                    $results[$variant[1]]->size = strlen($variant[0]);
+                    $class = $types[$typeNumber - 1];
+                    if (is_subclass_of($class, StructureItem::class)) {
+                        $results[$variant[1]] = (object) [
+                            'class' => $class,
+                            'size' => strlen($variant[0]),
+                        ];
+                    }
+                    else {
+                        $results[$variant[1]] = (object) [
+                            'object' => new $class($variant[0]),
+                            'size' => strlen($variant[0]),
+                        ];
+                    }
                     $string = substr_replace(
                         $string, str_repeat(' ', $results[$variant[1]]->size),
                         $variant[1], $results[$variant[1]]->size
@@ -124,10 +107,10 @@ class Raw
     }
 
     /**
-     * @param Item[] $items
+     * @param object[] $items
      * @param int|null $size
      * @param int $pos
-     * @return Item[]
+     * @return ValueItem[]
      */
     private function getStructure(array $items, $size, $pos = -1)
     {
@@ -138,10 +121,10 @@ class Raw
                 continue;
             }
             $block = $items[$i];
-            if ($block->is(Item::TYPE_RECTANGULAR, Item::TYPE_PARENTHESIS)) {
-                $block->setChildren(new Items($this->getStructure($items, $block->size, $i)));
+            if (!isset($block->object)) {
+                $block->object = new $block->class(new Items($this->getStructure($items, $block->size, $i)));
             }
-            $result[] = $block;
+            $result[] = $block->object;
             unset($block->size);
             $i += $block->size;
         }
@@ -155,17 +138,27 @@ class Raw
     public function parse($type = ParserAbstract::TYPE_QUERY)
     {
         $string = $this->string;
-        $result = $this->getIteration(self::$firstPatterns, $string);
+        $valuePatterns = [];
+        $structurePatterns = [];
+        $parser = $this->parser;
+        foreach ($parser::ITEMS as $itemClass) {
+            if (is_subclass_of($itemClass, StructureItem::class)) {
+                $structurePatterns[$itemClass] = $itemClass::TEMPLATE;
+            }
+            else {
+                $valuePatterns[$itemClass] = $itemClass::TEMPLATE;
+            }
+        }
+        $result = $this->getIteration($valuePatterns, $string);
         $results[] = $result;
         while (count($result)) {
-            $result = $this->getIteration(self::$patterns, $string);
+            $result = $this->getIteration($structurePatterns, $string);
             $results[] = $result;
         }
-
-        $parser = $this->parser;
-        return $parser::getSequence(
-            new Items($this->getStructure(call_user_func_array('array_replace', $results), strlen($string) + 2)),
-            $type
+        return $this->parser->getSequence(
+            new Items($this->getStructure(
+                call_user_func_array('array_replace', $results), strlen($string) + 2)
+            ), $type
         );
     }
 }

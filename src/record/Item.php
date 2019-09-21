@@ -1,6 +1,6 @@
 <?php namespace EugeneErg\SQLPreprocessor\Record;
 
-use EugeneErg\SQLPreprocessor\Raw\Item as OtherItem;
+use EugeneErg\SQLPreprocessor\Raw\ItemAbstract as OtherItem;
 
 class Item extends AbstractRecord
 {

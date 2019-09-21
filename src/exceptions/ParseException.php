@@ -1,6 +1,6 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
-use EugeneErg\SQLPreprocessor\Raw\Item;
+use EugeneErg\SQLPreprocessor\Raw\ItemAbstract;
 
 /**
  * Class ParseException
@@ -8,7 +8,7 @@ use EugeneErg\SQLPreprocessor\Raw\Item;
  *
  * @method static self incorrectCountArguments(int $count, int $min = null, int $max = null)
  * @method static self incorrectLink(object $link)
- * @method static self notAccessMethod(Item $item, string $methodName)
+ * @method static self notAccessMethod(ItemAbstract $item, string $methodName)
  * @method static self incorrectParserClass(string $className);
  *
  */
@@ -39,7 +39,7 @@ class ParseException extends Exception
         return "";// todo
     }
 
-    private function getNotAccessMethodMessage(Item $item, $methodName)
+    private function getNotAccessMethodMessage(ItemAbstract $item, $methodName)
     {
         return "";// todo
     }
