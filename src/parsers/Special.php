@@ -13,6 +13,7 @@ use EugeneErg\SQLPreprocessor\Raw\Item\Rectangular;
 use EugeneErg\SQLPreprocessor\Raw\Item\String;
 use EugeneErg\SQLPreprocessor\Raw\Item\Variable;
 use EugeneErg\SQLPreprocessor\Raw\Item\Word;
+use EugeneErg\SQLPreprocessor\Raw\Items;
 use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
 use EugeneErg\SQLPreprocessor\record\FieldTable;
 use EugeneErg\SQLPreprocessor\Record\Item;
@@ -29,7 +30,6 @@ class Special extends ParserAbstract
      * @var string[]
      */
     const ITEMS = [
-        Context::class,
         Field::class,
         Method::class,
         Number::class,
@@ -250,6 +250,42 @@ class Special extends ParserAbstract
             }
             return $result;
         });
+    }
+
+    private function isConnected(ItemAbstract $current, ItemAbstract $next)
+    {
+        if (!$current->is(ItemAbstract::TYPE_CONTEXT)) {
+            if ($next->is(
+                ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_NUMBER, ItemAbstract::TYPE_STRING, ItemAbstract::TYPE_VARIABLE, ItemAbstract::TYPE_SQL_VAR)) {
+                return true;
+            }
+            if ($next->is(ItemAbstract::TYPE_FIELD) && $next->getValue()[0] !== '.') {
+                return true;
+            }
+        }
+        if ($next->is(ItemAbstract::TYPE_PARENTHESIS)
+            && !$current->is(ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_METHOD)
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return self[]
+     */
+    public function getUnconnectedParts()
+    {
+        $result = [];
+        $items = [];
+        foreach ($this->items as $pos => $item) {
+            if (!isset($this[$pos + 1]) || self::isConnected($item, $this[$pos + 1])) {
+                $result[] = new self($items);
+                $items = [];
+            }
+        }
+        return $result;
     }
 
     /**

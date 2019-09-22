@@ -1,6 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw;
 
 use EugeneErg\SQLPreprocessor\Raw;
+use EugeneErg\SQLPreprocessor\Raw\Item;
 
 /**
  * Class Items
@@ -12,13 +13,13 @@ class Items implements \ArrayAccess, \Countable
     const POS_FLAG_LOWER_CASE = 2;
     const POS_FLAG_UPPER_CASE = 6;
     /**
-     * @var ItemAbstract[]
+     * @var Item\ValueItem[]
      */
     private $items = [];
 
     /**
      * RawItems constructor.
-     * @param ItemAbstract[] $items
+     * @param Item\ValueItem[] $items
      */
     public function __construct(array $items = [])
     {
@@ -38,7 +39,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @return ItemAbstract
+     * @return Item\ValueItem
      */
     public function offsetGet($offset)
     {
@@ -46,10 +47,10 @@ class Items implements \ArrayAccess, \Countable
     }
 
     /**
-     * @param ItemAbstract $value
+     * @param Item\ValueItem $value
      * @param int|null $offset
      */
-    private function set(ItemAbstract $value, $offset = null)
+    private function set(Item\ValueItem $value, $offset = null)
     {
         if (!isset($offset, $this->items[$offset])) {
             $this->items[] = $value;
@@ -61,7 +62,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @param ItemAbstract $value
+     * @param Item\ValueItem $value
      */
     public function offsetSet($offset, $value)
     {
@@ -74,42 +75,6 @@ class Items implements \ArrayAccess, \Countable
     public function offsetUnset($offset)
     {
         array_splice($this->items, $offset, 1);
-    }
-
-    private function isConnected(ItemAbstract $current, ItemAbstract $next)
-    {
-        if (!$current->is(ItemAbstract::TYPE_CONTEXT)) {
-            if ($next->is(
-                ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_NUMBER, ItemAbstract::TYPE_STRING, ItemAbstract::TYPE_VARIABLE, ItemAbstract::TYPE_SQL_VAR)) {
-                return true;
-            }
-            if ($next->is(ItemAbstract::TYPE_FIELD) && $next->getValue()[0] !== '.') {
-                return true;
-            }
-        }
-        if ($next->is(ItemAbstract::TYPE_PARENTHESIS)
-            && !$current->is(ItemAbstract::TYPE_WORD, ItemAbstract::TYPE_METHOD)
-        ) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * @return self[]
-     */
-    public function getUnconnectedParts()
-    {
-        $result = [];
-        $items = [];
-        foreach ($this->items as $pos => $item) {
-            if (!isset($this[$pos + 1]) || self::isConnected($item, $this[$pos + 1])) {
-                $result[] = new self($items);
-                $items = [];
-            }
-        }
-        return $result;
     }
 
     /**
@@ -180,7 +145,7 @@ class Items implements \ArrayAccess, \Countable
             $search = [];
             foreach ((array) $context as $type => $subjects) {
                 if (is_int($type)) {
-                    $type = ItemAbstract::TYPE_CONTEXT;
+                    $type = Raw\Item\Context::class;
                 }
                 if (is_null($subjects)) {
                     $search[$type] = null;

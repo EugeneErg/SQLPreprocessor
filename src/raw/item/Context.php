@@ -2,5 +2,5 @@
 
 class Context extends ValueItem
 {
-    const TEMPLATE = ',|;|:|[<>=]+|[+-]+|!+|[^\\[\\]\\(\\)\\w\\s\'"+-,;:<>=]+';//test it -= +=
+    const TEMPLATE = '[^\\s]*';
 }

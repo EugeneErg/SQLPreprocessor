@@ -1,14 +1,10 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-use EugeneErg\SQLPreprocessor\Raw\Items;
-
-/**
- * Class Parenthesis
- * @method Items getValue()
- */
 class Parenthesis extends StructureItem
 {
-    const TEMPLATE = "\\([^'\"\)\\(]*\\)";
+    const TEMPLATE = "\\([^\\)\\(]*\\)";
+    const INCLUDE_TEMPLATE = '(?<=.).*(?=.)';
+
     /**
      * @inheritDoc
      */

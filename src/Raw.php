@@ -2,6 +2,7 @@
 
 use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Parsers\Special;
+use EugeneErg\SQLPreprocessor\Raw\Item\Context;
 use EugeneErg\SQLPreprocessor\Raw\Item\String;
 use EugeneErg\SQLPreprocessor\Raw\Item\StructureItem;
 use EugeneErg\SQLPreprocessor\Raw\Item\ValueItem;
@@ -84,22 +85,28 @@ class Raw
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
                     $class = $types[$typeNumber - 1];
+                    $size = strlen($variant[0]);
+                    $replacement = str_repeat(' ', $size);
                     if (is_subclass_of($class, StructureItem::class)) {
                         $results[$variant[1]] = (object) [
                             'class' => $class,
-                            'size' => strlen($variant[0]),
+                            'size' => $size,
                         ];
+                        preg_match_all(
+                            "/" . $class::INCLUDE_TEMPLATE . "/",
+                            $variant[0], $replaces, PREG_OFFSET_CAPTURE
+                        );
+                        foreach ($replaces[0] as $replace) {
+                            $replacement = substr_replace($replacement, $replace[0], $replace[1], strlen($replace[0]));
+                        }
                     }
                     else {
                         $results[$variant[1]] = (object) [
                             'object' => new $class($variant[0]),
-                            'size' => strlen($variant[0]),
+                            'size' => $size,
                         ];
                     }
-                    $string = substr_replace(
-                        $string, str_repeat(' ', $results[$variant[1]]->size),
-                        $variant[1], $results[$variant[1]]->size
-                    );
+                    $string = substr_replace($string, $replacement, $variant[1], $size);
                 }
             }
         }
@@ -108,25 +115,61 @@ class Raw
 
     /**
      * @param object[] $items
+     * @param int $pos
+     * @param int $size
+     */
+    private function unionContext(array $items, $size, $pos)
+    {
+        $result = (object) [
+            'size' => 0,
+            'text' => '',
+        ];
+        $returnFirst = $items[$pos++];
+        while ($pos < $size) {
+            if (!isset($items[$pos])) {
+                $pos++;
+                continue;
+            }
+            if (!isset($items[$pos]->object) || !$items[$pos]->object instanceof Context) {
+                break;
+            }
+            $returnFirst = null;
+            $result->size += $items[$pos]->size;
+            $pos += $items[$pos]->size;
+            $result->text .= $items[$pos]->getValue();
+        }
+        if ($returnFirst) {
+            return $returnFirst;
+        }
+        $result->object = new Context($result->text);
+        return $result;
+    }
+
+    /**
+     * @param object[] $items
      * @param int|null $size
      * @param int $pos
      * @return ValueItem[]
      */
-    private function getStructure(array $items, $size, $pos = -1)
+    private function getStructure(array $items, $size, $pos = 0)
     {
+        $size += $pos;
         $result = [];
-        for ($i = $pos + 1; $i < $pos + $size - 1; ) {
-            if (!isset($items[$i])) {
-                $i++;
+        while ($pos < $size) {
+            if (!isset($items[$pos])) {
+                $pos++;
                 continue;
             }
-            $block = $items[$i];
+            $block = $items[$pos];
             if (!isset($block->object)) {
-                $block->object = new $block->class(new Items($this->getStructure($items, $block->size, $i)));
+                $block->object = new $block->class(new Items($this->getStructure($items, $block->size, $pos + 1)));
+            }
+            elseif ($block->object instanceof Context) {
+                $block = $this->unionContext($items, $size, $pos);
             }
             $result[] = $block->object;
             unset($block->size);
-            $i += $block->size;
+            $pos += $block->size;
         }
         return $result;
     }
@@ -155,9 +198,12 @@ class Raw
             $result = $this->getIteration($structurePatterns, $string);
             $results[] = $result;
         }
+        $results[] = $this->getIteration([
+            Context::class => Context::TEMPLATE
+        ], $string);
         return $this->parser->getSequence(
             new Items($this->getStructure(
-                call_user_func_array('array_replace', $results), strlen($string) + 2)
+                call_user_func_array('array_replace', $results), strlen($string))
             ), $type
         );
     }

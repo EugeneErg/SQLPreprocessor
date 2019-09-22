@@ -2,7 +2,8 @@
 
 class Rectangular extends StructureItem
 {
-    const TEMPLATE = "\\[[^'\"\]\\[]*\\]";
+    const TEMPLATE = "\\[[^\\]\\[]*\\]";
+    const INCLUDE_TEMPLATE = '(?<=.).*(?=.)';
 
     /**
      * @inheritDoc
