@@ -1,9 +1,9 @@
-<?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
+<?php namespace EugeneErg\SQLPreprocessor\Raw;
 
 /**
  * Class ItemAbstract
  */
-abstract class ValueItem
+abstract class Item
 {
     /**
      * @var string
@@ -23,18 +23,18 @@ abstract class ValueItem
         return $this->value;
     }
 
+    public function getRawValue()
+    {
+        return $this;
+    }
+
     /**
      * @param string[] $classes
      * @return bool
      */
     public function is(...$classes)
     {
-        foreach ($classes as $class) {
-            if (is_subclass_of($this, $class)) {
-                return true;
-            }
-        }
-        return false;
+        return in_array(get_class($this), $classes);
     }
 
     /**

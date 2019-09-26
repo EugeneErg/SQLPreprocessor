@@ -16,7 +16,7 @@ abstract class AbstractRecord
     private $root;
 
     /**
-     * @var Item[]
+     * @var Link[]
      */
     private $sequence;
 
@@ -31,18 +31,25 @@ abstract class AbstractRecord
     private $container;
 
     /**
+     * @var Container
+     */
+    private $parentContainer;
+
+    /**
      * AbstractRecord constructor.
      * @param mixed $object
      * @param Item[] $sequence
+     * @param self|null $parent
      * @param self|null $root
      * @param Container $container
      */
-    private function __construct($object, Container $container, $sequence = [], self $root = null)
+    private function __construct($object, Container $container, $sequence = [], self $parent = null, self $root = null)
     {
         $this->root = is_null($root) ? $this : $root;
         $this->object = $object;
         $this->sequence = $sequence;
         $this->container = $container;
+        $this->parentContainer = $parent;
 
         if (is_null($root)) {
             if (method_exists($this, 'initRoot')) {
@@ -63,11 +70,19 @@ abstract class AbstractRecord
     }
 
     /**
-     * @return Item[]
+     * @return Link[]
      */
     public function getSequence()
     {
         return $this->sequence;
+    }
+
+    /**
+     * @return static|null
+     */
+    public function getParent()
+    {
+        return $this->parentContainer ? self::getRecord($this->parentContainer) : null;
     }
 
     /**
@@ -110,6 +125,7 @@ abstract class AbstractRecord
     {
         self::$records[end($path)] = (object) [
             'class' => static::class,
+            'parent' => count($path) > 1? $path[count($path) - 2] : null,
             'root' => reset($path),
             'self' => null,
             'object' => $object,
@@ -134,7 +150,7 @@ abstract class AbstractRecord
 
     /**
      * @param Container $container
-     * @return self
+     * @return static
      */
     public static function getRecord(Container $container)
     {
@@ -152,6 +168,7 @@ abstract class AbstractRecord
             self::$records[$container]->object,
             $container,
             self::$records[$container]->sequence,
+            self::$records[$container]->parent,
             $root
         );
         return self::$records[$container]->self;

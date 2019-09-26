@@ -1,6 +1,8 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-class Context extends ValueItem
+use EugeneErg\SQLPreprocessor\Raw\Item;
+
+class Context extends Item
 {
     const TEMPLATE = '[^\\s]*';
 }

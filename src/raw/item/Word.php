@@ -1,6 +1,8 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-class Word extends ValueItem
+use EugeneErg\SQLPreprocessor\Raw\Item;
+
+class Word extends Item
 {
     const TEMPLATE = '\\b\\w+\\b';
 }

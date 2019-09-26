@@ -1,10 +1,12 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
+use EugeneErg\SQLPreprocessor\Raw\Item;
+
 /**
  * Class String
  * @method string getValue()
  */
-class String extends ValueItem
+class String extends Item
 {
     const TEMPLATE = "'(?:[^']*(?:'')*)+'|" . '"(?:[^"]*(?:"")*)+"';
 
@@ -25,5 +27,10 @@ class String extends ValueItem
     public function __toString()
     {
         return "'" . str_replace("'", "''", $this->getValue()) . "'";
+    }
+
+    public function getRawValue()
+    {
+        return $this->getValue();
     }
 }

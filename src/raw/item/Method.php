@@ -1,6 +1,8 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-class Method extends ValueItem
+use EugeneErg\SQLPreprocessor\Raw\Item;
+
+class Method extends Item
 {
     const TEMPLATE = '\\.\\s*[a-zA-Z_]\\w*\\b';
 

@@ -3,9 +3,7 @@
 use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Parsers\Special;
 use EugeneErg\SQLPreprocessor\Raw\Item\Context;
-use EugeneErg\SQLPreprocessor\Raw\Item\String;
 use EugeneErg\SQLPreprocessor\Raw\Item\StructureItem;
-use EugeneErg\SQLPreprocessor\Raw\Item\ValueItem;
 use EugeneErg\SQLPreprocessor\Raw\Items;
 
 /**
@@ -115,8 +113,9 @@ class Raw
 
     /**
      * @param object[] $items
-     * @param int $pos
      * @param int $size
+     * @param int $pos
+     * @return mixed|object|null
      */
     private function unionContext(array $items, $size, $pos)
     {
@@ -149,7 +148,7 @@ class Raw
      * @param object[] $items
      * @param int|null $size
      * @param int $pos
-     * @return ValueItem[]
+     * @return Item[]
      */
     private function getStructure(array $items, $size, $pos = 0)
     {

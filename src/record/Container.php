@@ -12,7 +12,7 @@ class Container
     use HashesTrait;
 
     /**
-     * @var Item[]
+     * @var Link[]
      */
     private $sequence = [];
 

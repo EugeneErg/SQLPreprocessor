@@ -1,7 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw;
 
+use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Raw;
-use EugeneErg\SQLPreprocessor\Raw\Item;
 
 /**
  * Class Items
@@ -13,13 +13,13 @@ class Items implements \ArrayAccess, \Countable
     const POS_FLAG_LOWER_CASE = 2;
     const POS_FLAG_UPPER_CASE = 6;
     /**
-     * @var Item\ValueItem[]
+     * @var Item[]
      */
     private $items = [];
 
     /**
      * RawItems constructor.
-     * @param Item\ValueItem[] $items
+     * @param Item[] $items
      */
     public function __construct(array $items = [])
     {
@@ -39,7 +39,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @return Item\ValueItem
+     * @return Item
      */
     public function offsetGet($offset)
     {
@@ -47,10 +47,10 @@ class Items implements \ArrayAccess, \Countable
     }
 
     /**
-     * @param Item\ValueItem $value
+     * @param Item $value
      * @param int|null $offset
      */
-    private function set(Item\ValueItem $value, $offset = null)
+    private function set(Item $value, $offset = null)
     {
         if (!isset($offset, $this->items[$offset])) {
             $this->items[] = $value;
@@ -62,7 +62,7 @@ class Items implements \ArrayAccess, \Countable
 
     /**
      * @param int $offset
-     * @param Item\ValueItem $value
+     * @param Item $value
      */
     public function offsetSet($offset, $value)
     {
@@ -78,7 +78,7 @@ class Items implements \ArrayAccess, \Countable
     }
 
     /**
-     * @param string|string[] $delimiter
+     * @param string $delimiter
      * @param int $maxCount
      * @return self[]
      */
@@ -86,18 +86,28 @@ class Items implements \ArrayAccess, \Countable
     {
         $result = [];
         $partOfChain = [];
-        foreach ($this->items as $link) {
-            if ($link->is(ItemAbstract::TYPE_CONTEXT)
+        foreach ($this->items as $item) {
+            if ($item instanceof Raw\Item\Context
                 && count($result) !== $maxCount - 1
-                && in_array($link->getValue(), (array)$delimiter)
             ) {
-                if (count($partOfChain)) {
-                    $result[] = new self($partOfChain);
+                $strings = preg_split(
+                    "/{$delimiter}/", $item->getValue(),
+                    $maxCount - count($result) > 1 ? $maxCount - count($result) : -1
+                );
+                if (count($strings) === 1) {
+                    $partOfChain[] = $item;
+                    continue;
+                }
+                foreach ($strings as $string) {
+                    if (count($partOfChain)) {
+                        $result[] = new self($partOfChain);
+                    }
+                    $partOfChain = [new Raw\Item\Context($string)];
                 }
                 $partOfChain = [];
             }
             else {
-                $partOfChain[] = $link;
+                $partOfChain[] = $item;
             }
         }
         if (count($partOfChain)) {
@@ -156,15 +166,15 @@ class Items implements \ArrayAccess, \Countable
                     }
                 }
             }
-            $context = function($value, $type) use($search) {
-                return array_key_exists($type, $search)
-                    && ($search[$type] === null || in_array($value, $search[$type]));
+            $context = function($value, Item $item) use($search) {
+                return array_key_exists(get_class($item), $search)
+                    && ($search[get_class($item)] === null || in_array($value, $search[get_class($item)]));
             };
         }
         for ($i = $offset; $i < $this->count(); $i++) {
             if ($context(
                     $this->transformCase($this[$i]->getValue(), $caseTransform),
-                    $this[$i]->getType()
+                    $this[$i]
                 ) !== $notMatch
             ) {
                 return $i;
@@ -197,15 +207,16 @@ class Items implements \ArrayAccess, \Countable
     }
 
     /**
-     * @return mixed
+     * @param ParserAbstract|null $parser
+     * @return Raw|mixed
      */
-    public function getRawValue()
+    public function getRawValue(ParserAbstract $parser = null)
     {
         $result = [];
         foreach ($this->items as $item) {
-            $result[] = $item->getRawValue();
+            $result[] = $item->getRawValue($parser);
         }
-        return $this->count() === 1 ? $result[0] : new Raw(implode(' ', $result));
+        return $this->count() === 1 ? reset($result) : new Raw(implode(' ', $result), $parser);
     }
 
     /**
@@ -213,7 +224,7 @@ class Items implements \ArrayAccess, \Countable
      */
     public function getRawValues()
     {
-        $arrayItems = $this->explode([',',';']);
+        $arrayItems = $this->explode(',|;');
         $result = [];
         foreach ($arrayItems as $items) {
             $result[] = $items->getRawValue();

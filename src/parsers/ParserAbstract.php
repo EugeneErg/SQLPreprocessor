@@ -125,7 +125,7 @@ abstract class ParserAbstract
      * @param string $type
      * @return Link[]
      */
-    public function getSequence($items, $type = self::TYPE_QUERY)
+    public function getSequence(Raw\Items $items, $type = self::TYPE_QUERY)
     {
         $prevItems = $this->items;
         $this->items = $items;
