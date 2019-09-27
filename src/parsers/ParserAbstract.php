@@ -28,10 +28,10 @@ abstract class ParserAbstract
     const TYPE_GROUP_BY = 'group by';
     const TYPE_ARGUMENT = 'argument';
 
-    const TYPE_WHERE = 'where';
-    const TYPE_ON = 'where';
-    const TYPE_HAVING = 'where';
-    const TYPE_USING = 'using';
+    const TYPE_WHERE = 'argument';
+    const TYPE_ON = 'argument';
+    const TYPE_HAVING = 'argument';
+    const TYPE_USING = 'argument';
 
     const TYPE_SWITCH = 'default';
     const TYPE_DEFAULT = 'default';
@@ -68,16 +68,6 @@ abstract class ParserAbstract
      * @return Link[]
      */
     abstract public function getGroupBySequence();
-
-    /**
-     * @return Link[]
-     */
-    abstract public function getWhereSequence();
-
-    /**
-     * @return Link[]
-     */
-    abstract public function getUsingSequence();
 
     /**
      * @return Link[]

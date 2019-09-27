@@ -3,11 +3,11 @@
 use EugeneErg\SQLPreprocessor\Link;
 use EugeneErg\SQLPreprocessor\ParseException;
 use EugeneErg\SQLPreprocessor\Raw;
-use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
 use EugeneErg\SQLPreprocessor\Record\Container;
 use EugeneErg\SQLPreprocessor\record\FieldTable;
 use EugeneErg\SQLPreprocessor\Record\Item;
 use EugeneErg\SQLPreprocessor\Record\Query;
+use EugeneErg\SQLPreprocessor\Record\Table;
 use EugeneErg\SQLPreprocessor\Record\Variable;
 
 /**
@@ -275,7 +275,7 @@ class Special extends ParserAbstract
                 else {
                     $order = 'asc';
                 }*/
-                $result[] = new Link('return', $this->getSequence($part, self::TYPE_ARGUMENT, true);
+                $result[] = new Link('return', $this->getSequence($part, self::TYPE_ARGUMENT, true));
             }
 
             return $result;
@@ -303,7 +303,7 @@ class Special extends ParserAbstract
      */
     public function getQuerySequence()
     {
-        return self::getQuery($this->items)->sequence;
+        return $this->getQuery($this->items)->sequence;
     }
 
     /**
@@ -368,24 +368,6 @@ class Special extends ParserAbstract
 
             return $results;
         });
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function getUsingSequence()
-    {
-        // TODO: Implement getUsingSequence() method.
-        return $this->getArgumentSequence();
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function getWhereSequence()
-    {
-        // TODO: Implement getWhereSequence() method.
-        return $this->getArgumentSequence();
     }
 
     private function getDefaultWithCallback(\Closure $callback)
@@ -454,7 +436,10 @@ class Special extends ParserAbstract
                         }
 
                         $result[] = new Link($item->getValue(), [
-                            $this->items->splice($num + 1, $pos - $num - 1)->getRawValue()
+                            $this->getSequence(
+                                $this->items->splice($num + 1, $pos - $num - 1),
+                                self::TYPE_ARGUMENT
+                            )
                         ], true);
                         $num++;
                         break;
@@ -498,57 +483,7 @@ class Special extends ParserAbstract
         return self::getSelectSequence();
     }
 
-    private static function getTableVariable(Raw\Items $items)
-    {
-        if (!count($items)) {
-            throw ParseException::incorrectCountArguments(0, 1);
-        }
-        /**
-         * record|fields => array || string
-         */
-        if ($items[0]->is(Raw\ItemAbstract::TYPE_RECORD)) {
-            if (count($items) !== 1) {
-                throw ParseException::incorrectCountArguments(count($items), 1, 1);
-            }
-            $record = AbstractRecord::getRecord($items[0]->getValue());
-
-            if (count($record->getSequence())) {
-                throw ParseException::incorrectCountArguments(count($items), 1, 1);
-            }
-
-            return $items[0]->getValue();
-        }
-        if ($items[0]->is(Raw\ItemAbstract::TYPE_FIELD)) {
-            if ($items[0]->getValue()[0] === '.') {
-                throw ParseException::incorrectLink($items[0]);
-            }
-            $tableName = [substr($items[0]->getValue(), 1, -1)];
-            unset($items[0]);
-            foreach ($items as $num => $item) {
-                if (!$item->is(Raw\ItemAbstract::TYPE_FIELD)) {
-                    throw ParseException::incorrectLink($item);
-                }
-                if ($item->getValue()[0] !== '.') {
-                    if ($num !== count($items) - 1) {
-                        throw ParseException::incorrectLink($item);
-                    }
-                    $alias = substr($item->getValue(), 1, -1);
-                }
-            }
-            if (!isset($alias)) {
-                $alias = end($tableName);
-            }
-
-
-            if (isset($items[1])) {
-
-
-            }
-        }
-        //foreach ()
-    }
-
-    private static function getQuery(Raw\Items $items)
+    private function getQuery(Raw\Items $items)
     {
         //limit offset distinct...
 
@@ -587,7 +522,7 @@ class Special extends ParserAbstract
                 case 'inner'://intersect
                 case 'outer'://except
                     if (isset($items[1])
-                        && $items[1]->is(Raw\ItemAbstract::TYPE_WORD)
+                        && $items[1] instanceof Raw\Item\Word
                         && strtolower($items[1]->getValue()) === 'join'
                     ) {
                         unset($items[1]);
@@ -601,7 +536,7 @@ class Special extends ParserAbstract
                         $is_union = true;
                     }
                     elseif (isset($items[1])
-                        && $items[1]->is(Raw\ItemAbstract::TYPE_WORD)
+                        && $items[1] instanceof Raw\Item\Word
                         && strtolower($items[1]->getValue()) === 'union'
                     ) {
                         unset($items[1]);
@@ -618,18 +553,60 @@ class Special extends ParserAbstract
                     unset($items[0]);
                     $part = $items->splice(0, $pos - 1);
                     $parts = $part->explode(',');
+
                     foreach ($parts as $part) {
-                        if (!count($part)) {
-                            continue;
+                        switch (count($part)) {
+                            case 0: continue(2);
+                            case 2:
+                                $parenthesis = reset($part);
+                                $variable = end($part);
+                                break;
+                            case 1:
+                                if ($part[0] instanceof Raw\Item\Parenthesis) {
+                                    $parenthesis = $part[0];
+                                    $variable = null;
+                                }
+                                else {
+                                    $variable = $part[0];
+                                    $parenthesis = null;
+                                }
+                                break;
+                            default:
+                                throw ParseException::incorrectCountArguments(count($part), 1, 2);
                         }
-                        if ($part[0]->is(Raw\ItemAbstract::TYPE_PARENTHESIS)) {
-                            $query = self::getQuery($part[0]->getValue());
-                            unset($part[0]);
-                        }
-                        else {
+
+                        if (!is_nuLL($parenthesis)) {
+                            if (!$parenthesis instanceof Raw\Item\Parenthesis) {
+                                throw ParseException::incorrectLink($parenthesis);
+                            }
+
                             $query = null;
                         }
-                        $variable = self::getTableVariable($part);
+                        else {
+                            $query = $this->getQuery($parenthesis->getValue());
+                        }
+                        if (!is_nuLL($variable)) {
+                            if ($variable instanceof Raw\Item\Field) {
+                                $record = FieldTable::getRecord($variable->getValue());
+                                if ($parenthesis && (count($record->getTableName()) != 1
+                                    || $record->getTableName()[0] !== $record->getAlias())
+                                ) {
+                                    throw ParseException::incorrectLink($variable);
+                                }
+                            }
+                            elseif ($variable instanceof Raw\Item\Record) {
+                                $record = Table::getRecord($variable->getValue());
+                            }
+                            else {
+                                throw ParseException::incorrectLink($variable);
+                            }
+                            if (count($record->getSequence())) {
+                                throw ParseException::incorrectLink($variable);
+                            }
+                        }
+                        else {
+                            $variable = Query::create();
+                        }
 
                         if (is_null($query)) {
                             $result->sequence[] = new Link('table', [$variable, $blockName, $is_union], true);
@@ -652,12 +629,14 @@ class Special extends ParserAbstract
                     $pos = self::geNextBlock($items);
                     unset($items[0]);
                     $part = $items->splice(0, $pos - 1);
-                    $result->sequence[] = new Link($blockName, self::getWhereSequence($part), true);
+                    $result->sequence[] = new Link($blockName,
+                        $this->getSequence($part, self::TYPE_ARGUMENT), true
+                    );
                     break;
                 case 'order':
                 case 'group':
                     if (isset($items[1])
-                        && $items[1]->is(Raw\ItemAbstract::TYPE_WORD)
+                        && $items[1] instanceof Raw\Item\Word
                         && strtoupper($items[1]->getValue()) === 'BY'
                     ) {
                         unset($items[1]);
@@ -672,14 +651,14 @@ class Special extends ParserAbstract
                     $pos = self::geNextBlock($items);
                     unset($items[0]);
                     $part = $items->splice(0, $pos - 1);
-                    $result->sequence[] = new Link($blockName);
-                    $method = ucfirst($blockName);
+
                     if (in_array($blockName, ['limit', 'distinct'])) {
-                        $result->{$blockName} = call_user_func([self::class, "get{$method}Sequence"], $part);
+                        $result->{$blockName} = $this->getSequence($part, $blockName);
                     }
                     else {
+                        $result->sequence[] = new Link($blockName);
                         $result->sequence[] = array_merge(
-                            $result->sequence, call_user_func([self::class, "get{$method}Sequence"], $part)
+                            $result->sequence, $this->getSequence($part, $blockName)
                         );
                     }
             }
@@ -690,10 +669,11 @@ class Special extends ParserAbstract
     /**
      * @inheritDoc
      */
-    protected static function getLimitSequence(Raw\Items $items)
+    protected function getLimitSequence()
     {
-        $parts = $items->explode(',');
+        $parts = $this->items->explode(',');
         $result = [];
+
         switch (count($parts)) {
             case 1:
             case 2:
@@ -707,16 +687,17 @@ class Special extends ParserAbstract
             default:
                 throw ParseException::incorrectCountArguments(count($parts), 1, 1);
         }
+
         return $result;
     }
 
     /**
      * @inheritDoc
      */
-    protected static function getDistinctSequence(Raw\Items $items)
+    protected function getDistinctSequence()
     {
-        if (count($items)) {
-            throw ParseException::incorrectCountArguments(count($items), 0, 0);
+        if (count($this->items)) {
+            throw ParseException::incorrectCountArguments(count($this->items), 0, 0);
         }
         return true;
     }

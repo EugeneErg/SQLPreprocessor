@@ -1,6 +1,5 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Raw\Item;
 use EugeneErg\SQLPreprocessor\Raw\Items;
 
@@ -14,27 +13,4 @@ abstract class StructureItem extends Item
     {
         parent::__construct($value);
     }
-
-    /**
-     * @param ParserAbstract|null $parser
-     * @return \EugeneErg\SQLPreprocessor\Raw|Item|mixed
-     */
-    public function getRawValue(ParserAbstract $parser = null)
-    {
-        return $this->getValue()->getRawValue($parser);
-    }
-
-    /*public function getRawValues(ParserAbstract $parser = null)
-    {
-        $result = [];
-        foreach ($this->getValue() as $item) {
-            if ($item instanceof self) {
-                $result[] = $item->getRawValues($parser);
-            }
-            else {
-                $result[] = $item->getRawValue();
-            }
-        }
-        return $result;
-    }*/
 }

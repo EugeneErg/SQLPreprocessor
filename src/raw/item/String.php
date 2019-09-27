@@ -28,9 +28,4 @@ class String extends Item
     {
         return "'" . str_replace("'", "''", $this->getValue()) . "'";
     }
-
-    public function getRawValue()
-    {
-        return $this->getValue();
-    }
 }

@@ -41,9 +41,4 @@ class Record extends Item
 
         parent::__construct($record->getContainer());
     }
-
-    public function getRawValue()
-    {
-        return $this->getValue();
-    }
 }

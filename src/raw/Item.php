@@ -23,11 +23,6 @@ abstract class Item
         return $this->value;
     }
 
-    public function getRawValue()
-    {
-        return $this;
-    }
-
     /**
      * @param string[] $classes
      * @return bool

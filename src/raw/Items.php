@@ -205,38 +205,4 @@ class Items implements \ArrayAccess, \Countable
     {
         return new self(array_slice($this->items, $offset, $length));
     }
-
-    /**
-     * @param ParserAbstract|null $parser
-     * @return Raw|mixed
-     */
-    public function getRawValue(ParserAbstract $parser = null)
-    {
-        $result = [];
-        foreach ($this->items as $item) {
-            $result[] = $item->getRawValue($parser);
-        }
-        return $this->count() === 1 ? reset($result) : new Raw(implode(' ', $result), $parser);
-    }
-
-    /**
-     * @return array
-     */
-    public function getRawValues()
-    {
-        $arrayItems = $this->explode(',|;');
-        $result = [];
-        foreach ($arrayItems as $items) {
-            $result[] = $items->getRawValue();
-        }
-        return $result;
-    }
-
-    /**
-     * @return string
-     */
-    public function __toString()
-    {
-        return "{$this->getRawValue()}";
-    }
 }
