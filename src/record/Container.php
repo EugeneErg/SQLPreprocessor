@@ -83,7 +83,7 @@ class Container
     }
 
     /**
-     * @param string $name
+     * @param string|[] $name
      * @param array $arguments
      * @return self
      */
