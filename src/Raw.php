@@ -82,7 +82,6 @@ class Raw
         foreach ($matches as $typeNumber => $variants) {
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
-                    $class = $types[$typeNumber - 1];
                     $size = strlen($variant[0]);
                     $replacement = str_repeat(' ', $size);
                     if (is_subclass_of($class, StructureItem::class)) {
@@ -167,7 +166,6 @@ class Raw
                 $block = $this->unionContext($items, $size, $pos);
             }
             $result[] = $block->object;
-            unset($block->size);
             $pos += $block->size;
         }
         return $result;
@@ -200,10 +198,11 @@ class Raw
         $results[] = $this->getIteration([
             Context::class => Context::TEMPLATE
         ], $string);
+
         return $this->parser->getSequence(
             new Items($this->getStructure(
-                call_user_func_array('array_replace', $results), strlen($string))
-            ), $type
+                call_user_func_array('array_replace', $results), strlen($string)
+            )), $type
         );
     }
 }

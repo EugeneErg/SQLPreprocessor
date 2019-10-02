@@ -106,7 +106,10 @@ abstract class ParserAbstract
     private static function camelCase($string)
     {
         $words = explode(' ', $string);
-        array_walk($words, 'ucfirst');
+        array_walk($words, function($value) {
+            return ucfirst($value);
+        });
+
         return implode('', $words);
     }
 

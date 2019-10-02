@@ -12,7 +12,7 @@ class Field extends Item
 {
     const TEMPLATE = '`(?:[^`]*(?:``)*)+`'
         . '(?:\\s*\\.\\s*`(?:[^`]*(?:``)*)+`)*'
-        . '(?:\\s*(?:\\.\\s*[a-zA-Z_]\\w*\\(?!\\s*\\()|`(?:[^`]*(?:``)*)+`))?';
+        . '(?:(?:\\s*\\.\\s*[a-zA-Z_]\\w*(?!\\s*\\())*|\\s+`(?:[^`]*(?:``)*)+`)?';
 
     /**
      * Field constructor.
@@ -21,30 +21,30 @@ class Field extends Item
      */
     public function __construct($value)
     {
-        preg_match_all('/(?:\\.|\\s)\\s*(?:`(?:[^`]*(?:``)*)+`|[a-zA-Z_]\\w*)/', $value, $matches);
+        preg_match_all('/(?:\\.|\\s|^)\\s*(?:`(?:[^`]*(?:``)*)+`|[a-zA-Z_]\\w*)/', $value, $matches);
         $tableName = [];
         $alias = null;
         $field = null;
         foreach ($matches as $match) {
-            switch ($match[0]) {
+            switch ($match[0][0]) {
                 case '`':
                     if (count($tableName)) {
-                        $alias = $this->fieldToString($match);
+                        $alias = $this->fieldToString($match[0]);
                     }
                     else {
-                        $tableName[] = $this->fieldToString($match);
+                        $tableName[] = $this->fieldToString($match[0]);
                     }
                     break;
                 case '.':
-                    if ($match[strlen($match) - 1] === '`') {
-                        $tableName[] = $this->fieldToString(trim(substr($match, 1)));
+                    if ($match[0][strlen($match[0]) - 1] === '`') {
+                        $tableName[] = $this->fieldToString(trim(substr($match[0], 1)));
                     }
                     else {
-                        $field = trim(substr($match, 1));
+                        $field = trim(substr($match[0], 1));
                     }
                     break;
                 default:
-                    $alias = $this->fieldToString($match);
+                    $alias = $this->fieldToString($match[0]);
             }
         }
         if (is_null($alias)) {

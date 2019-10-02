@@ -49,6 +49,10 @@ class Link
      */
     public function getName($type = self::TYPE_NORMAL)
     {
+        if (!is_string($this->name)) {
+            return $this->name;
+        }
+
         switch ($type) {
             case self::TYPE_LOWER: return strtolower($this->name);
             case self::TYPE_UPPER: return strtoupper($this->name);
@@ -81,11 +85,17 @@ class Link
     }
 
     /**
-     * @param self[] $children
+     * @param self[]|\Closure $children
      */
-    public function setChildren($children)
+    public function setChildren(array $children)
     {
+        if ($children instanceof \Closure) {
+            $this->children = $children;
+            return;
+        }
+
         $this->children = [];
+
         foreach ($children as $child) {
             $this->addChild($child);
         }

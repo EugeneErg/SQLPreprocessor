@@ -1,6 +1,8 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw\Item;
 
-class Variable extends ItemAbstract
+use EugeneErg\SQLPreprocessor\Raw\Item;
+
+class Variable extends Item
 {
     const TEMPLATE = '@[\\w\\.]*';
 

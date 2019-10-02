@@ -11,7 +11,7 @@ use EugeneErg\SQLPreprocessor\Record\Container;
  */
 class Record extends Item
 {
-    const TEMPLATE = '\\$[0-9a-f]{32}\\$(?:\\s*\\.\\s*(?:[a-zA-Z_]\\w*\\(?!\\s*\\())*';
+    const TEMPLATE = '\\$[0-9a-f]{32}\\$(?:(?:\\s*\\.\\s*[a-zA-Z_]\\w*)*(?!\\s*\\())?';
 
     /**
      * @inheritDoc

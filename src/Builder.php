@@ -1,5 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
+
 /**
  * Class Builder
  * @package EugeneErg\SQLPreprocessor
@@ -42,9 +44,11 @@ class Builder
         'orderby' => Topology::PARENT_TYPE,
         'groupby' => Topology::PARENT_TYPE,
         'var' => Topology::PARENT_TYPE,
-        'select',
+        'select' => Topology::PARENT_TYPE,
         'delete',
-        'insert',
+        'break',
+        'table',
+        'insert' => Topology::PARENT_TYPE,
         'update' => Topology::PARENT_TYPE,
         'switch' => ['case', 'default'],
     ];
@@ -52,21 +56,15 @@ class Builder
     private function getStructureBlock($value)
     {
         $objectFromHash = Hasher::getObject($value);
+
         if ($objectFromHash instanceof Variable) {
-            return (object) [
-                'name' => 'return',
-                'options' => [$objectFromHash],
-                'is_method' => true,
-            ];
+            return new Link('return', [$objectFromHash], true);
         }
         if ($objectFromHash instanceof Raw) {
             return $objectFromHash;
         }
-        return (object) [
-            'name' => 'return',
-            'options' => [$value],
-            'is_method' => true,
-        ];
+
+        return new Link('return', [$value], true);
     }
 
     /**
@@ -77,8 +75,26 @@ class Builder
      */
     public static function __callStatic($name, array $args)
     {
-        $sql = new self();
-        return $sql->__call($name, $args);
+        return (new self())->__call($name, $args);
+    }
+
+    /**
+     * @param string $query
+     * @param ParserAbstract|null|string $parser
+     * @return Builder
+     */
+    public static function raw($query, $parser = null)
+    {
+        $new = new self();
+
+        if (is_null($parser) || $parser instanceof ParserAbstract) {
+            $new->sequence = new Raw($query, $parser);
+        }
+        else {
+            $new->sequence = call_user_func_array([Raw::class, $parser], [$query]);
+        }
+
+        return $new;
     }
 
     public function function_Name()
@@ -140,16 +156,19 @@ class Builder
             $default->addChildren([
                 'if' => $if,
                 'switch' => $switch,
-                'return' => true
+                'return' => true,
+                'break' => true
             ]);
             $from = new Structure();
             $from->addChildren([
                 'from' => $from,
+                'table' => true,
                 'switch' => $switch,
                 'orderby' => $default,
                 'groupby' => $default,
                 'return' => true,
                 'var' => $default,
+                'select' => $default,
             ]);
 
             /*
@@ -199,10 +218,10 @@ class Builder
 
             $root = new Structure(function(Structure $root) use(&$result) {
                 $type = $root->getVariant(
-                    ['update',      'from' => 1,      'insert' => 0, 'delete' => 0, 'select' => 0],
-                    ['insert' => 1, 'from' => 1,      'update' => 0, 'delete' => 0, 'select' => 0],
-                    ['delete' => 1, 'from' => 0,      'insert' => 0, 'update' => 0, 'select' => 0],
-                    ['select' => 1, 'from' => [0, 1], 'insert' => 0, 'delete' => 0, 'update' => 0]
+                    ['update', 'from' => 1,      'insert' => 0, 'delete' => 0, 'select' => 0],
+                    ['insert', 'from' => 1,      'update' => 0, 'delete' => 0, 'select' => 0],
+                    ['delete', 'from' => 0,      'insert' => 0, 'update' => 0, 'select' => 0],
+                    ['select', 'from' => [0, 1], 'insert' => 0, 'delete' => 0, 'update' => 0]
                 );
                 $result = [
                     self::UPDATE_TYPE,
@@ -213,21 +232,46 @@ class Builder
                 return true;
             }, [
                 'from' => $from,
-                'insert' => true,
+                'insert' => $default,
                 'update' => $default,
                 'delete' => true,
-                'select' => true,
+                'select' => $default,
             ]);
         };
         $root($this->getStructure());
         return $result;
     }
 
-    public function __invoke(Translater $sqlClass, \Closure $function = null)
+    /**
+     * @param Translater $sqlClass
+     * @param \Closure|null $function
+     *
+     * @throws \Exception
+     */
+    public function __invoke(Translater $sqlClass = null, \Closure $function = null)
     {
         $structure = $this->getStructure();
+
+        if ($structure instanceof \Closure) {
+            $rootAsRaw = true;
+            $structure = $structure(ParserAbstract::TYPE_QUERY);
+        }
+        else {
+            $rootAsRaw = false;
+        }
+
+        var_dump($structure);die;
+
         $questionType = $this->getQuestionType($structure);
 
+        var_dump($structure);
+
+
+
+
+
+
+        /*
 
 
 
@@ -246,7 +290,7 @@ class Builder
         if (is_null($function)) {
             return $request;
         }
-        return $this->createResult($function($request), $select);
+        return $this->createResult($function($request), $select);*/
     }
 
     /**
@@ -346,22 +390,27 @@ class Builder
      */
     private function chainToArray(Raw $raw, Link $parent)
     {
-        return RawToSequence::getQueryBlock($raw);
-        /**
-        case 'from':
-        case 'delete':
-        case 'join':
-        case 'left':
-        case 'leftjoin':
-        case 'right':
-        case 'rightjoin':
-        case 'union':
-        case 'correlate':
-        case 'query':
-        case 'outer':
-        case 'outerjoin':
-        case 'inner':
-        case 'innerjoin':
-         */
+        $name = $parent->getName();
+
+        if (!is_string($name)) {
+            throw new \Exception('invalid link name');
+        }
+
+        $name = strtolower($name);
+        $types = [
+            'from' => ParserAbstract::TYPE_FROM,
+            'orderby' => ParserAbstract::TYPE_ORDER_BY,
+            'groupby' => ParserAbstract::TYPE_GROUP_BY,
+            'select' => ParserAbstract::TYPE_SELECT,
+            'insert' => ParserAbstract::TYPE_INSERT,
+            'update' => ParserAbstract::TYPE_UPDATE,
+            //'var' =>
+        ];
+
+        if (!isset($types[$name])) {
+            throw new \Exception('invalid link name');
+        }
+
+        return $raw->parse($types[$name]);
     }
 }

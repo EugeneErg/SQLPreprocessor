@@ -1,7 +1,5 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
-use const Grpc\CHANNEL_CONNECTING;
-
 /**
  * Class Topology
  * @package EugeneErg\SQLPreprocessor
@@ -102,13 +100,13 @@ class Topology
 
     /**
      * @param mixed $block
-     * @param Link $prev
+     * @param Raw|array $prev
      * @return array
      * @throws \Exception
      */
     private function getBlock($block, $prev)
     {
-        if (is_array($block) || $block instanceof Link) {
+        if (is_array($block)) {
             return $block;
         }
         if (!isset($this->callback)) {
@@ -157,10 +155,17 @@ class Topology
                     }
                     $pos--;
                 }
-                elseif (!$blocks[$pos] instanceof Link) {
+                elseif (is_array($blocks[$pos])) {
                     $block->setChildren($this->getChildren(
-                        $this->getBlock($blocks[$pos], $block), $block->getName(Link::TYPE_LOWER)
+                        $blocks[$pos], $block->getName(Link::TYPE_LOWER)
                     ));
+                }
+                elseif ($blocks[$pos] instanceof Raw) {
+                    $block->setChildren(function($type) use ($blocks, $block, $pos) {
+                        return $this->getChildren(
+                            $blocks[$pos]->parse($type), $block->getName(Link::TYPE_LOWER)
+                        );
+                    });
                 }
                 else {
                     $block->setChildren($this->getChildren(
@@ -230,10 +235,17 @@ class Topology
         $current = new Link($parentName);
         $result = [$current];
         for (; $pos < count($blocks); $pos++) {
-            if (!$blocks[$pos] instanceof Link) {
-                $current->setChildren($this->getArrayChildren($this->getBlock($blocks[$pos], $current)));
+            if (is_array($blocks[$pos])) {
+                $current->setChildren($this->getArrayChildren($blocks[$pos]));
                 $pos++;
-            } else {
+            }
+            elseif ($blocks[$pos] instanceof Raw) {
+                $current->setChildren(function($type) use($blocks, $pos) {
+                    return $this->getArrayChildren($blocks[$pos]->parse($type));
+                });
+                $pos++;
+            }
+            else {
                 $current->setChildren($this->getArrayChildren(
                     $blocks, $pos, array_merge($ends, $next, ["end$parentName"])
                 ));
@@ -290,9 +302,15 @@ class Topology
             }
             $result[] = $block;
             $pos++;
-            if (isset($blocks[$pos]) && !$blocks[$pos] instanceof Link) {
-                $block->setChildren($this->getArrayChildren($this->getBlock($blocks[$pos], $block)));
-            } else {
+            if (isset($blocks[$pos]) && is_array($blocks[$pos])) {
+                $block->setChildren($this->getArrayChildren($blocks[$pos]));
+            }
+            elseif (isset($blocks[$pos]) && $blocks[$pos] instanceof Raw) {
+                $block->setChildren(function($type) use($blocks, $pos) {
+                    return $this->getArrayChildren($blocks[$pos]->parse($type));
+                });
+            }
+            else {
                 $block->setChildren($this->getArrayChildren($blocks, $pos, array_merge($ends, $next)));
                 if ($this->breakLevel > count($next)) {
                     $this->breakLevel -= count($next);
@@ -306,14 +324,21 @@ class Topology
     }
 
     /**
-     * @param array $blocks
-     * @param \Closure|null $callback
-     * @return array
+     * @param array|Raw $blocks
+     * @return array|\Closure
      * @throws \Exception
      */
-    public function getStructure(array $blocks, \Closure $callback = null)
+    public function getStructure($blocks)
     {
-        $this->callback = $callback;
-        return $this->getArrayChildren($blocks);
+        if (is_array($blocks)) {
+            return $this->getArrayChildren($blocks);
+        }
+        if ($blocks instanceof Raw) {
+            return function($type) use($blocks) {
+                return $this->getArrayChildren($blocks->parse($type));
+            };
+        }
+
+        throw new \Exception('Invalid Argument type');
     }
 }

@@ -9,7 +9,6 @@ trait SequenceTrait
     use HashesTrait;
 
     private $sequence = [];
-    private $structure = [];
     private $otherSequenceName = null;
 
     /**
@@ -20,10 +19,10 @@ trait SequenceTrait
      */
     private function addBlock($name, array $args, $is_method = true)
     {
-        if (!isset($this->sequence[$name])) {
+        if (!isset($this->structure[$name])) {
             throw new \Exception('invalid sequence');
         }
-        $this->structure[] = new Link(
+        $this->sequence[] = new Link(
             $name,
             $args,
             $is_method
@@ -39,6 +38,7 @@ trait SequenceTrait
     public function __call($name, array $args)
     {
         $this->addBlock($name, $args);
+
         return $this;
     }
 
@@ -50,19 +50,23 @@ trait SequenceTrait
     public function __get($name)
     {
         if (!is_null($child = Hasher::getObject($name))) {
-            $this->structure[] = &$child->structure;
+            $this->sequence[] = &$child->sequence;
+
             return $this;
         }
         if (!isset($this->structure[$name])) {
             if (isset($this->otherSequenceName)) {
                 $this->addBlock($this->otherSequenceName, [$name], false);
+
                 return $this;
             }
             if (method_exists($this, 'getStructureBlock')) {
-                $this->structure[] = $callback = $this->getStructureBlock($name);
+                $this->sequence[] = $this->getStructureBlock($name);
+
                 return $this;
             }
         }
+
         return $this->__call($name, []);
     }
 
@@ -72,15 +76,6 @@ trait SequenceTrait
      */
     private function getStructure()
     {
-        $topology = new Topology($this->structure);
-        if (method_exists($this, 'chainToArray')) {
-            $callback = function($object, Link $parent) {
-                return $this->chainToArray($object, $parent);
-            };
-        }
-        else {
-            $callback = null;
-        }
-        return $topology->getStructure($this->sequence, $callback);
+        return (new Topology($this->structure))->getStructure($this->sequence);
     }
 }

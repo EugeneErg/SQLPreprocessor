@@ -38,7 +38,7 @@ class Special extends ParserAbstract
         return $this->getSelectSequence();
     }
 
-    private function getWordArgument(Raw\Item\Word $item, &$activeItem, &$num)
+    private function getWordAttribute(Raw\Item\Word $item, &$activeItem, &$num)
     {
         $result = $activeItem ? [$activeItem] : [];
 
@@ -62,7 +62,7 @@ class Special extends ParserAbstract
         return $result;
     }
 
-    private function getVariableArgument(Raw\Item $item, &$activeItem)//sql variable
+    private function getVariableAttribute(Raw\Item $item, &$activeItem)//sql variable
     {
         $result = $activeItem ? [$activeItem] : [];
         $activeItem = Item::create($item);
@@ -70,9 +70,9 @@ class Special extends ParserAbstract
         return $result;
     }
 
-    private function getParenthesisArgument(Raw\Item\Parenthesis $item, &$activeItem)
+    private function getParenthesisAttribute(Raw\Item\Parenthesis $item, &$activeItem)
     {
-        return $this->getVariableArgument($item, $activeItem);
+        return $this->getVariableAttribute($item, $activeItem);
     }
 
     private function getStringAttribute(Raw\Item $item, &$activeItem)
@@ -165,7 +165,7 @@ class Special extends ParserAbstract
 
         for ($num = 0; $num < count($this->items); $num++) {
             $item = $this->items[$num];
-            $shortName = strrchr(get_class($item), '\\');
+            $shortName = substr(strrchr(get_class($item), '\\'), 1);
             $arguments[] = $this->{"get{$shortName}Attribute"}($item, $activeItem, $num);
         }
 

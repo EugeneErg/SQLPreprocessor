@@ -121,11 +121,11 @@ abstract class AbstractRecord
      * @param Link[] $sequence
      * @param mixed $object
      */
-    private static function addAssociate(array $path, array $sequence, $object = null)
+    protected static function addAssociate(array $path, array $sequence, $object = null)
     {
-        self::$records[end($path)] = (object) [
+        self::$records[end($path)->__toString()] = (object) [
             'class' => static::class,
-            'parent' => count($path) > 1? $path[count($path) - 2] : null,
+            'parent' => count($path) > 1 ? $path[count($path) - 2] : null,
             'root' => reset($path),
             'self' => null,
             'object' => $object,
@@ -154,24 +154,24 @@ abstract class AbstractRecord
      */
     public static function getRecord(Container $container)
     {
-        if (isset(self::$records[$container]->self)) {
-            return self::$records[$container]->self;
+        if (isset(self::$records["$container"]->self)) {
+            return self::$records["$container"]->self;
         }
-        $class = self::$records[$container]->class;
-        if (self::$records[$container]->root !== $container) {
-            $root = self::getRecord(self::$records[$container]->root);
+        $class = self::$records["$container"]->class;
+        if (self::$records["$container"]->root !== $container) {
+            $root = self::getRecord(self::$records["$container"]->root);
         }
         else {
             $root = null;
         }
-        self::$records[$container]->self = new $class(
-            self::$records[$container]->object,
+        self::$records["$container"]->self = new $class(
+            self::$records["$container"]->object,
             $container,
-            self::$records[$container]->sequence,
-            self::$records[$container]->parent,
+            self::$records["$container"]->sequence,
+            self::$records["$container"]->parent,
             $root
         );
-        return self::$records[$container]->self;
+        return self::$records["$container"]->self;
     }
 
     public function getContainer()
