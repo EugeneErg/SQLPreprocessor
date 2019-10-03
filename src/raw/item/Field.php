@@ -25,30 +25,32 @@ class Field extends Item
         $tableName = [];
         $alias = null;
         $field = null;
-        foreach ($matches as $match) {
-            switch ($match[0][0]) {
+        foreach ($matches[0] as $match) {
+            switch ($match[0]) {
                 case '`':
                     if (count($tableName)) {
-                        $alias = $this->fieldToString($match[0]);
+                        $alias = $this->fieldToString($match);
                     }
                     else {
-                        $tableName[] = $this->fieldToString($match[0]);
+                        $tableName[] = $this->fieldToString($match);
                     }
                     break;
                 case '.':
-                    if ($match[0][strlen($match[0]) - 1] === '`') {
-                        $tableName[] = $this->fieldToString(trim(substr($match[0], 1)));
+                    if ($match[strlen($match) - 1] === '`') {
+                        $tableName[] = $this->fieldToString(trim(substr($match, 1)));
                     }
                     else {
-                        $field = trim(substr($match[0], 1));
+                        $field = trim(substr($match, 1));
                     }
                     break;
                 default:
-                    $alias = $this->fieldToString($match[0]);
+                    $alias = $this->fieldToString($match);
             }
         }
+
         if (is_null($alias)) {
             $value = FieldTable::create(end($tableName), $tableName);
+
             if (!is_null($field)) {
                 $value = $value->$field;
             }
@@ -56,6 +58,7 @@ class Field extends Item
         else {
             $value = FieldTable::create($alias, $tableName);
         }
+
         parent::__construct($value);
     }
 

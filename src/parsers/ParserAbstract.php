@@ -124,6 +124,7 @@ abstract class ParserAbstract
         $this->items = $items;
         $result = $this->{'get' . self::camelCase($type) . 'Sequence'}();
         $this->items = $prevItems;
+
         return $result;
     }
 }

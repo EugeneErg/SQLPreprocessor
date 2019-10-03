@@ -150,9 +150,11 @@ class Items implements \ArrayAccess, \Countable
     public function pos($context, $offset = 0, $flags = 0)
     {
         $caseTransform = $this->getCaseTransform($flags);
-        $notMatch = $flags & self::POS_FLAG_NOT_MATCH === self::POS_FLAG_NOT_MATCH;
+        $notMatch = ($flags & self::POS_FLAG_NOT_MATCH) === self::POS_FLAG_NOT_MATCH;
+
         if (!$context instanceof \Closure) {
             $search = [];
+
             foreach ((array) $context as $type => $subjects) {
                 if (is_int($type)) {
                     $type = Raw\Item\Context::class;
@@ -166,6 +168,7 @@ class Items implements \ArrayAccess, \Countable
                     }
                 }
             }
+
             $context = function($value, Item $item) use($search) {
                 return array_key_exists(get_class($item), $search)
                     && ($search[get_class($item)] === null || in_array($value, $search[get_class($item)]));
@@ -180,6 +183,7 @@ class Items implements \ArrayAccess, \Countable
                 return $i;
             }
         }
+
         return null;
     }
 

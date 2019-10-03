@@ -138,6 +138,9 @@ class Topology
             if ($this->breakLevel = $this->getBreakLevel($block->getName(Link::TYPE_LOWER), $ends)) {
                 return $result;
             }
+            if (!isset($this->blocks[$block->getName(Link::TYPE_LOWER)])) {
+                var_dump($this->blocks, $block->getName(Link::TYPE_LOWER));die;
+            }
             $regulation = $this->blocks[$block->getName(Link::TYPE_LOWER)];
             $result[] = $block;
             if ($regulation->type !== self::WORD_TYPE) {

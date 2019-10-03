@@ -80,6 +80,10 @@ class Raw
         $results = [];
         $types = array_keys($patterns);
         foreach ($matches as $typeNumber => $variants) {
+            if (!isset($types[$typeNumber - 1])) {
+                var_dump($matches, $types, $typeNumber);die;
+            }
+            $class = $types[$typeNumber - 1];
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
                     $size = strlen($variant[0]);
@@ -181,6 +185,7 @@ class Raw
         $valuePatterns = [];
         $structurePatterns = [];
         $parser = $this->parser;
+
         foreach ($parser::ITEMS as $itemClass) {
             if (is_subclass_of($itemClass, StructureItem::class)) {
                 $structurePatterns[$itemClass] = $itemClass::TEMPLATE;
@@ -189,12 +194,15 @@ class Raw
                 $valuePatterns[$itemClass] = $itemClass::TEMPLATE;
             }
         }
+
         $result = $this->getIteration($valuePatterns, $string);
         $results[] = $result;
+
         while (count($result)) {
             $result = $this->getIteration($structurePatterns, $string);
             $results[] = $result;
         }
+
         $results[] = $this->getIteration([
             Context::class => Context::TEMPLATE
         ], $string);

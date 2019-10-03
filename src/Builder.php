@@ -262,7 +262,7 @@ class Builder
 
         var_dump($structure);die;
 
-        $questionType = $this->getQuestionType($structure);
+        $questionType = $this->getQuestionType();
 
         var_dump($structure);
 

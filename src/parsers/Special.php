@@ -513,19 +513,26 @@ class Special extends ParserAbstract
         if ($pos !== 0) {
             throw ParseException::qwe();
         }
-        $item = $items[0];
         while (count($items)) {
-            $blockName = strtolower($item->getValue());
+            $blockName = strtolower($items[0]->getValue());
+            unset($items[0]);
+
+            if (null === $pos = self::geNextBlock($items)) {
+                $pos = count($items);
+            }
+
+            $part = $items->splice(0, $pos);
+
             switch ($blockName) {
                 case 'left':
                 case 'right':
                 case 'inner'://intersect
                 case 'outer'://except
-                    if (isset($items[1])
-                        && $items[1] instanceof Raw\Item\Word
-                        && strtolower($items[1]->getValue()) === 'join'
+                    if (isset($part[0])
+                        && $part[0] instanceof Raw\Item\Word
+                        && strtolower($part[0]->getValue()) === 'join'
                     ) {
-                        unset($items[1]);
+                        unset($part[0]);
                     }
                 case 'from':
                 case 'join'://inner
@@ -535,11 +542,11 @@ class Special extends ParserAbstract
                         $blockName = 'from';
                         $is_union = true;
                     }
-                    elseif (isset($items[1])
-                        && $items[1] instanceof Raw\Item\Word
-                        && strtolower($items[1]->getValue()) === 'union'
+                    elseif (isset($part[0])
+                        && $part[0] instanceof Raw\Item\Word
+                        && strtolower($part[0]->getValue()) === 'union'
                     ) {
-                        unset($items[1]);
+                        unset($part[0]);
                         $is_union = true;
                     }
                     else {
@@ -549,9 +556,6 @@ class Special extends ParserAbstract
                         $blockName = 'inner';
                     }
 
-                    $pos = self::geNextBlock($items);
-                    unset($items[0]);
-                    $part = $items->splice(0, $pos - 1);
                     $parts = $part->explode(',');
 
                     foreach ($parts as $part) {
@@ -575,15 +579,15 @@ class Special extends ParserAbstract
                                 throw ParseException::incorrectCountArguments(count($part), 1, 2);
                         }
 
-                        if (!is_nuLL($parenthesis)) {
+                        if (!is_null($parenthesis)) {
                             if (!$parenthesis instanceof Raw\Item\Parenthesis) {
                                 throw ParseException::incorrectLink($parenthesis);
                             }
 
-                            $query = null;
+                            $query = $this->getQuery($parenthesis->getValue());
                         }
                         else {
-                            $query = $this->getQuery($parenthesis->getValue());
+                            $query = null;
                         }
                         if (!is_nuLL($variable)) {
                             if ($variable instanceof Raw\Item\Field) {
@@ -626,41 +630,29 @@ class Special extends ParserAbstract
                 case 'on':
                 case 'where':
                 case 'using':
-                    $pos = self::geNextBlock($items);
-                    unset($items[0]);
-                    $part = $items->splice(0, $pos - 1);
+                case 'delete':
                     $result->sequence[] = new Link($blockName,
                         $this->getSequence($part, self::TYPE_ARGUMENT), true
                     );
                     break;
                 case 'order':
                 case 'group':
-                    if (isset($items[1])
-                        && $items[1] instanceof Raw\Item\Word
-                        && strtoupper($items[1]->getValue()) === 'BY'
+                    if (isset($part[0])
+                        && $part[0] instanceof Raw\Item\Word
+                        && strtoupper($part[0]->getValue()) === 'BY'
                     ) {
-                        unset($items[1]);
+                        unset($part[0]);
                     }
                     $blockName = $blockName . 'By';
                 case 'update':
                 case 'select':
-                case 'delete':
                 case 'insert':
+                    $result->sequence[] = $link = new Link($blockName);
+                    $result->sequence[] = $this->getSequence($part, $blockName);
+                    break;
                 case 'limit':
                 case 'distinct':
-                    $pos = self::geNextBlock($items);
-                    unset($items[0]);
-                    $part = $items->splice(0, $pos - 1);
-
-                    if (in_array($blockName, ['limit', 'distinct'])) {
-                        $result->{$blockName} = $this->getSequence($part, $blockName);
-                    }
-                    else {
-                        $result->sequence[] = new Link($blockName);
-                        $result->sequence[] = array_merge(
-                            $result->sequence, $this->getSequence($part, $blockName)
-                        );
-                    }
+                    $result->{$blockName} = $this->getSequence($part, $blockName);
             }
         }
         return $result;
