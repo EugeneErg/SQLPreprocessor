@@ -119,10 +119,13 @@ class Builder
     }
 
     /**
+     * @param array $structure
+     *
      * @return null
+     *
      * @throws \Exception
      */
-    private function getQuestionType()
+    private function getQuestionType(array $structure)
     {
         static $root;
         $result = null;
@@ -218,10 +221,10 @@ class Builder
 
             $root = new Structure(function(Structure $root) use(&$result) {
                 $type = $root->getVariant(
-                    ['update', 'from' => 1,      'insert' => 0, 'delete' => 0, 'select' => 0],
-                    ['insert', 'from' => 1,      'update' => 0, 'delete' => 0, 'select' => 0],
-                    ['delete', 'from' => 0,      'insert' => 0, 'update' => 0, 'select' => 0],
-                    ['select', 'from' => [0, 1], 'insert' => 0, 'delete' => 0, 'update' => 0]
+                    ['update', 'from' => [0], 'insert' => 0, 'delete' => 0, 'select' => 0, 'table' => [0]],
+                    ['insert', 'from' => [0], 'update' => 0, 'delete' => 0, 'select' => 0, 'table' => [0]],
+                    ['delete', 'from' => [0], 'insert' => 0, 'update' => 0, 'select' => 0, 'table' => [0]],
+                    ['select', 'from' => [0], 'insert' => 0, 'delete' => 0, 'update' => 0, 'table' => [0]]
                 );
                 $result = [
                     self::UPDATE_TYPE,
@@ -236,9 +239,10 @@ class Builder
                 'update' => $default,
                 'delete' => true,
                 'select' => $default,
+                'table'  => true,
             ]);
         };
-        $root($this->getStructure());
+        $root($structure);
         return $result;
     }
 
@@ -260,9 +264,9 @@ class Builder
             $rootAsRaw = false;
         }
 
-        var_dump($structure);die;
+        $questionType = $this->getQuestionType($structure);
 
-        $questionType = $this->getQuestionType();
+
 
         var_dump($structure);
 

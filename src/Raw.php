@@ -80,9 +80,6 @@ class Raw
         $results = [];
         $types = array_keys($patterns);
         foreach ($matches as $typeNumber => $variants) {
-            if (!isset($types[$typeNumber - 1])) {
-                var_dump($matches, $types, $typeNumber);die;
-            }
             $class = $types[$typeNumber - 1];
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {

@@ -5,7 +5,7 @@ class Structure
     private $validate;
     private $children;
     private $blocks = [];
-    private $block_lists = [];
+    private $blockLists = [];
 
     public function __construct(\Closure $callback = null, array $children = [])
     {
@@ -27,20 +27,20 @@ class Structure
 
     public function __invoke(array $blocks)
     {
-        $this->block_lists = $blocks;
+        $this->blockLists = $blocks;
         $validate = $this->validate;
         $this->setBlockPositions($blocks);
         if (!is_null($validate) && !$validate($this)) {
             throw new \Exception('invalid structure');
         }
-        foreach ($this->block_lists as $block) {
+        foreach ($this->blockLists as $block) {
             $name = $block->getName();
             if (empty($this->children[$name])) {
                 throw new \Exception("invalid block name '{$name}'");
             }
             $child = $this->children[$name];
             $children = $block->getChildren();
-            if ($child instanceof \Closure) {
+            if ($child instanceof Structure) {
                 $child($children);
             }
             elseif (count($children)) {
@@ -50,7 +50,7 @@ class Structure
         $this->blocks = [];
     }
     
-    public function counts(...$params)
+    private function counts(array $params)
     {
         $result = [];
         foreach ($params as $name) {
@@ -79,16 +79,18 @@ class Structure
         $result = null;
         foreach ($sets as $num => $params) {
             foreach ($params as $name => $count) {
-                $real_count = $this->count($count);
                 if (is_int($name)) {
+                    $real_count = $this->count($count);
                     $min_count = 1;
                     $max_count = $real_count;
                 }
                 elseif (is_array($count)) {
+                    $real_count = $this->count($name);
                     $min_count = reset($count);
                     $max_count = count($count) > 1 ? end($count) : $real_count;
                 }
-            else {
+                else {
+                    $real_count = $this->count($name);
                     $min_count = $count;
                     $max_count = $count;
                 }
@@ -147,7 +149,7 @@ class Structure
     public function partials(array $parts, \Closure $callback)
     {
         foreach ($parts as $from => $to) {
-            $partials = $this->getPartials($from, $to, $this->block_lists);
+            $partials = $this->getPartials($from, $to, $this->blockLists);
             foreach ($partials as $partial) {
                 new Structure(function ($part) use ($callback, $from, $to) {
                     return $callback($part, $from, $to);
