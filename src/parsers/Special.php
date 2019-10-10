@@ -1,5 +1,6 @@
 <?php namespace EugeneErg\SQLPreprocessor\Parsers;
 
+use EugeneErg\SQLPreprocessor\Builder;
 use EugeneErg\SQLPreprocessor\Link;
 use EugeneErg\SQLPreprocessor\ParseException;
 use EugeneErg\SQLPreprocessor\Raw;
@@ -283,27 +284,15 @@ class Special extends ParserAbstract
     }
 
     /**
-     * @param Raw\Items $items
-     * @param int $pos
      * @return int|null
      */
-    private static function geNextBlock(Raw\Items $items, $pos = 0)
+    private function geNextBlock()
     {
-        return $items->pos([Raw\Item\Word::class => [
-            'UPDATE', 'DELETE', 'INSERT', 'SELECT',
+        return $this->items->pos([Raw\Item\Word::class => [
             'ORDER', 'GROUP',
-            'HAVING', 'ON', 'WHERE', 'USING',
             'FROM', 'LEFT', 'JOIN', 'RIGHT', 'INNER', 'OUTER', 'CORRELATE', 'UNION',
             'LIMIT','OFFSET', 'DISTINCT',
-        ]], $pos, Raw\Items::POS_FLAG_UPPER_CASE);
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function getQuerySequence()
-    {
-        return $this->getQuery($this->items)->sequence;
+        ]], 0, Raw\Items::POS_FLAG_UPPER_CASE);
     }
 
     /**
@@ -370,7 +359,23 @@ class Special extends ParserAbstract
         });
     }
 
-    private function getDefaultWithCallback(\Closure $callback)
+    private function getReturns(Raw\Items $items)
+    {
+        $parts = $items->explode(',|;');
+        $results = [];
+
+        foreach ($parts as $part) {
+            if (count($part)) {
+                $results[] = new Link('return',
+                    $this->getSequence($part, self::TYPE_ARGUMENT), true
+                );
+            }
+        }
+
+        return $results;
+    }
+
+    public function getDefaultSequence()
     {
         $result = [];
         $return = [];
@@ -380,6 +385,7 @@ class Special extends ParserAbstract
 
             if ($item instanceof Raw\Item\Word) {
                 $word = strtolower($item->getValue());
+
                 switch ($word) {
                     case 'break':
                         if (!isset($this->items[$num + 1])
@@ -399,7 +405,6 @@ class Special extends ParserAbstract
                         }
 
                         $result[] = new Link($word, [$breakValue[0]->getValue()], true);
-
                         break;
                     case 'if':
                     case 'elseif':
@@ -411,7 +416,7 @@ class Special extends ParserAbstract
                             throw ParseException::incorrectLink($item);
                         }
                         if (count($return)) {
-                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
                             $return = [];
                         }
 
@@ -431,7 +436,7 @@ class Special extends ParserAbstract
                             throw ParseException::ewfer(':');
                         }
                         if (count($return)) {
-                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
                             $return = [];
                         }
 
@@ -448,7 +453,7 @@ class Special extends ParserAbstract
                     case 'endif':
                     case 'endswitch':
                         if (count($return)) {
-                            $result = array_merge($result, $callback(new Raw\Items($return)));
+                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
                             $return = [];
                         }
 
@@ -462,20 +467,12 @@ class Special extends ParserAbstract
                 $return[] = $item;
             }
         }
-        if (count($return)) {
-            $result = array_merge($result, $callback(new Raw\Items($return)));
-        }
-        return $result;
-    }
 
-    public function getDefaultSequence()
-    {
-        return self::getDefaultWithCallback(function(Raw\Items $items) {
-            return [new Link('return',
-                $this->getSequence($items, self::TYPE_ARGUMENT),
-                true
-            )];
-        });
+        if (count($return)) {
+            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
+        }
+
+        return $result;
     }
 
     public function getUpdateSequence()
@@ -483,7 +480,7 @@ class Special extends ParserAbstract
         return self::getSelectSequence();
     }
 
-    private function getQuery(Raw\Items $items)
+    public function getQuerySequence()
     {
         //limit offset distinct...
 
@@ -508,24 +505,31 @@ class Special extends ParserAbstract
             'distinct' => false,
             'sequence' => []
         ];
+        $pos = $this->geNextBlock();
 
-        $pos = self::geNextBlock($items);
-        if ($pos !== 0) {
-            throw ParseException::qwe();
+        //всё что до, это селект/апдейт/инсерт/делит
+        if ($pos) {
+            $part = $this->items->splice(0, $pos);
+            $result->sequence = $this->getSequence($part, 'default');
         }
-        while (count($items)) {
-            $blockName = strtolower($items[0]->getValue());
-            unset($items[0]);
+        else {
+            $result->sequence = [];
+        }
 
-            if (null === $pos = self::geNextBlock($items)) {
-                $pos = count($items);
+        while (count($this->items)) {
+            $blockName = strtolower($this->items[0]->getValue());
+            unset($this->items[0]);
+
+            if (null === $pos = $this->geNextBlock()) {
+                $pos = count($this->items);
             }
 
-            $part = $items->splice(0, $pos);
+            $part = $this->items->splice(0, $pos);
 
             switch ($blockName) {
                 case 'left':
                 case 'right':
+                case 'cross':
                 case 'inner'://intersect
                 case 'outer'://except
                     if (isset($part[0])
@@ -536,8 +540,8 @@ class Special extends ParserAbstract
                     }
                 case 'from':
                 case 'join'://inner
-                case 'correlate':
                 case 'union'://from , , , ,
+                case 'correlate':
                     if ($blockName === 'union') {
                         $blockName = 'from';
                         $is_union = true;
@@ -546,6 +550,10 @@ class Special extends ParserAbstract
                         && $part[0] instanceof Raw\Item\Word
                         && strtolower($part[0]->getValue()) === 'union'
                     ) {
+                        if ($blockName === 'correlate') {
+                            throw ParseException::incorrectLink($part[0]);
+                        }
+
                         unset($part[0]);
                         $is_union = true;
                     }
@@ -584,7 +592,7 @@ class Special extends ParserAbstract
                                 throw ParseException::incorrectLink($parenthesis);
                             }
 
-                            $query = $this->getQuery($parenthesis->getValue());
+                            $query = $this->getSequence($parenthesis->getValue(), self::TYPE_QUERY);
                         }
                         else {
                             $query = null;
@@ -612,28 +620,33 @@ class Special extends ParserAbstract
                             $variable = Query::create();
                         }
 
+                        $stringType = strtolower($blockName);
+                        $flags = Builder::QUERY_FLAGS;
+                        $type = isset($flags[$stringType]) ? $flags[$stringType] : 0;
+
                         if (is_null($query)) {
-                            $result->sequence[] = new Link('table', [$variable, $blockName, $is_union], true);
+                            $result->sequence[] = new Link('from', [$variable, $type], true);
                         }
                         else {
-                            $result->sequence[] = new Link('query', [$variable, [
-                                'type' => $blockName,
-                                'is_union' => $is_union,
-                                'limit' => $query->limit,
-                                'distinct' => $query->distinct,
-                            ]], true);
+                            if (count($query->limit)) {
+                                $limit = end($query->limit);
+                                $offset = count($query->limit) > 1 ? reset($query->limit) : 0;
+                            }
+                            else {
+                                $limit = null;
+                                $offset = 0;
+                            }
+                            $result->sequence[] = new Link('query', [
+                                $variable,
+                                ($query->distinct ? Builder::QUERY_FLAG_DISTINCT : 0)
+                                | ($is_union ? Builder::QUERY_FLAG_UNION : 0)
+                                | $type,
+                                $limit,
+                                $offset,
+                            ], true);
                             $result->sequence[] = $query->sequence;
                         }
                     }
-                    break;
-                case 'having':
-                case 'on':
-                case 'where':
-                case 'using':
-                case 'delete':
-                    $result->sequence[] = new Link($blockName,
-                        $this->getSequence($part, self::TYPE_ARGUMENT), true
-                    );
                     break;
                 case 'order':
                 case 'group':
@@ -643,11 +656,9 @@ class Special extends ParserAbstract
                     ) {
                         unset($part[0]);
                     }
+
                     $blockName = $blockName . 'By';
-                case 'update':
-                case 'select':
-                case 'insert':
-                    $result->sequence[] = $link = new Link($blockName);
+                    $result->sequence[] = new Link($blockName);
                     $result->sequence[] = $this->getSequence($part, $blockName);
                     break;
                 case 'limit':
@@ -673,6 +684,10 @@ class Special extends ParserAbstract
                     if (count($part) !== 1) {
                         throw ParseException::incorrectCountArguments(count($part), 1, 1);
                     }
+                    if (!$part[0] instanceof Raw\Item\Number) {
+                        throw ParseException::incorrectLink($part[0]);
+                    }
+
                     $result[] = $part[0]->getValue();
                 }
                 break;

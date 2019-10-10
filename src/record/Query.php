@@ -15,7 +15,7 @@ class Query extends AbstractRecord
     }
 
     /**
-     * @param  $record
+     * @param AbstractRecord $record
      */
     public function useRecord(AbstractRecord $record)
     {

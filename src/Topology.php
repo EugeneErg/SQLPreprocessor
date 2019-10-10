@@ -1,5 +1,8 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
+use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
+
 /**
  * Class Topology
  * @package EugeneErg\SQLPreprocessor
@@ -335,7 +338,12 @@ class Topology
         }
         if ($blocks instanceof Raw) {
             return function($type) use($blocks) {
-                return $this->getArrayChildren($blocks->parse($type));
+                if ($type !== ParserAbstract::TYPE_QUERY) {
+                    return $this->getArrayChildren($blocks->parse($type));
+                }
+
+                $result = $blocks->parse($type);
+                $result->topology = $this->getArrayChildren($result->sequence);
             };
         }
 

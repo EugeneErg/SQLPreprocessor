@@ -45,7 +45,7 @@ abstract class ParserAbstract
     protected $items;
 
     /**
-     * @return Link[]
+     * @return object
      */
     abstract public function getQuerySequence();
 

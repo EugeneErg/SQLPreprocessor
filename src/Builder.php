@@ -1,6 +1,9 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
 use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
+use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
+use EugeneErg\SQLPreprocessor\Record\Container;
+use EugeneErg\SQLPreprocessor\Record\Query;
 
 /**
  * Class Builder
@@ -8,29 +11,40 @@ use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
  *
  * @property $this $else
  * @property $this $endif
- * @property $this $groupby
- * @property $this $endgroupby
- * @property $this $endorderby
- * @property $this $default
+ * @property $this $groupBy
+ * @property $this $endGroupBy
+ * @property $this $orderBy
+ * @property $this $endOrderBy
  * @property $this $endswitch
- * @property $this $endvar
- * @property $this $endfrom
- * @property $this $enddelete
+ * @property $this $endQuery
  *
  * @method $this if(mixed $argument)
  * @method $this elseif(mixed $argument)
- * @method $this from(mixed ...$arguments)
- * @method $this delete(mixed ...$arguments)
- * @method $this orderby(mixed $argument)
- * @method $this select(mixed $argument)
- * @method $this insert(mixed $argument)
- * @method $this update(mixed $argument)
+ * @method $this from(Container $container, int $flags = 0, int $limit = null, int $offset = 0)
+ * @method $this query(Container $container, int $flags = 0, int $limit = null, int $offset = 0)
+ *
  * @method $this switch(mixed $argument)
  * @method $this case(mixed $argument)
- * @method $this var(mixed $argument)
  */
 class Builder
 {
+    /**
+     * self::delete
+     * ->if (table1->old)-
+     *      ->return(table1)
+     * ->endif
+     * from 1
+     *
+     * self::deleteRaw("
+     *      IF (old)
+     *          table1
+     *      endif
+     *      from
+     *
+     * ");
+     *
+     */
+
     use SequenceTrait;
 
     const UPDATE_TYPE = 'update';
@@ -38,20 +52,56 @@ class Builder
     const DELETE_TYPE = 'delete';
     const SELECT_TYPE = 'select';
 
+    const JOIN_TYPE_INNER = 0;
+    const JOIN_TYPE_LEFT = 1;
+    const JOIN_TYPE_RIGHT = 2;
+    const JOIN_TYPE_OUTER = 3;
+    const JOIN_TYPE_CORRELATE = 4;
+    const QUERY_FLAG_UNION = 8;
+    const QUERY_FLAG_DISTINCT = 16;
+
+    const QUERY_FLAGS = [
+        'from' => self::JOIN_TYPE_INNER,
+        'join' => self::JOIN_TYPE_INNER,
+        'leftjoin' => self::JOIN_TYPE_LEFT,
+        'rightjoin' => self::JOIN_TYPE_RIGHT,
+        'innerjoin' => self::JOIN_TYPE_INNER,
+        'crossjoin' => self::JOIN_TYPE_INNER,
+        'outerjoin' => self::JOIN_TYPE_OUTER,
+        'left' => self::JOIN_TYPE_LEFT,
+        'right' => self::JOIN_TYPE_RIGHT,
+        'inner' => self::JOIN_TYPE_INNER,
+        'cross' => self::JOIN_TYPE_INNER,
+        'outer' => self::JOIN_TYPE_OUTER,
+        'correlate' => self::JOIN_TYPE_CORRELATE,
+        'union' => self::QUERY_FLAG_UNION,
+        'distinct' => self::QUERY_FLAG_DISTINCT,
+    ];
+
+    /**
+     * @var string
+     */
+    private $type = self::SELECT_TYPE;
+
     protected $structure = [
         'if' => ['type' => Topology::SEQUENCE_TYPE, 'next' => ['elseif', 'else']],
-        'from' => Topology::PARENT_TYPE,
+        'query' => Topology::PARENT_TYPE,
         'orderby' => Topology::PARENT_TYPE,
         'groupby' => Topology::PARENT_TYPE,
-        'var' => Topology::PARENT_TYPE,
-        'select' => Topology::PARENT_TYPE,
-        'delete',
         'break',
-        'table',
-        'insert' => Topology::PARENT_TYPE,
-        'update' => Topology::PARENT_TYPE,
+        'from',
         'switch' => ['case', 'default'],
     ];
+
+    /**
+     * Builder constructor
+     * .
+     * @param string $type
+     */
+    private function __construct($type = self::SELECT_TYPE)
+    {
+        $this->type = $type;
+    }
 
     private function getStructureBlock($value)
     {
@@ -68,19 +118,9 @@ class Builder
     }
 
     /**
-     * @param string $name
-     * @param array $args
-     * @return $this
-     * @throws \Exception
-     */
-    public static function __callStatic($name, array $args)
-    {
-        return (new self())->__call($name, $args);
-    }
-
-    /**
      * @param string $query
      * @param ParserAbstract|null|string $parser
+     *
      * @return Builder
      */
     public static function raw($query, $parser = null)
@@ -95,6 +135,91 @@ class Builder
         }
 
         return $new;
+    }
+
+    /**
+     * @param $query
+     * @param null $parser
+     *
+     * @return Builder
+     */
+    public static function deleteRaw($query, $parser = null)
+    {
+        $result = self::raw($query, $parser);
+        $result->type = self::DELETE_TYPE;
+
+        return $result;
+    }
+
+    /**
+     * @param $query
+     * @param null $parser
+     *
+     * @return Builder
+     */
+    public static function selectRaw($query, $parser = null)
+    {
+        return self::raw($query, $parser);
+    }
+
+    /**
+     * @param $query
+     * @param null $parser
+     *
+     * @return Builder
+     */
+    public static function updateRaw($query, $parser = null)
+    {
+        $result = self::raw($query, $parser);
+        $result->type = self::UPDATE_TYPE;
+
+        return $result;
+    }
+
+    /**
+     * @param $query
+     * @param null $parser
+     *
+     * @return Builder
+     */
+    public static function insertRaw($query, $parser = null)
+    {
+        $result = self::raw($query, $parser);
+        $result->type = self::INSERT_TYPE;
+
+        return $result;
+    }
+
+    /**
+     * @return Builder
+     */
+    public static function insert()
+    {
+        return new self(self::INSERT_TYPE);
+    }
+
+    /**
+     * @return Builder
+     */
+    public static function update()
+    {
+        return new self(self::UPDATE_TYPE);
+    }
+
+    /**
+     * @return Builder
+     */
+    public static function delete()
+    {
+        return new self(self::DELETE_TYPE);
+    }
+
+    /**
+     * @return Builder
+     */
+    public static function select()
+    {
+        return new self();
     }
 
     public function function_Name()
@@ -121,19 +246,17 @@ class Builder
     /**
      * @param array $structure
      *
-     * @return null
-     *
      * @throws \Exception
      */
-    private function getQuestionType(array $structure)
+    private function validateStructure(array $structure)
     {
-        static $root;
-        $result = null;
-        if (!$root) {
-            $default = new Structure(function(Structure $default) {
+        static $query;
+
+        if (!$query) {
+            $default = new Structure(function (Structure $default) {
                 return true;
             });
-            $if = new Structure(function(Structure $if) {
+            $if = new Structure(function (Structure $if) {
                 $if->getVariant(
                     ['elseif', 'else' => [0, 1]],
                     ['elseif' => 0, 'else' => 1]
@@ -144,8 +267,7 @@ class Builder
                 'elseif' => $default,
                 'else' => $default
             ]);
-
-            $switch = new Structure(function(Structure $switch) {
+            $switch = new Structure(function (Structure $switch) {
                 $switch->getVariant(
                     ['case', 'default' => [0, 1]]
                 );
@@ -155,95 +277,287 @@ class Builder
                 'case' => $default,
                 'default' => $default,
             ]);
-
             $default->addChildren([
                 'if' => $if,
                 'switch' => $switch,
                 'return' => true,
                 'break' => true
             ]);
-            $from = new Structure();
-            $from->addChildren([
-                'from' => $from,
-                'table' => true,
-                'switch' => $switch,
+            $query = new Structure();
+            $query->addChildren([
+                'query' => $query,
+                'from' => true,
                 'orderby' => $default,
                 'groupby' => $default,
+                'if' => $if,
+                'switch' => $switch,
                 'return' => true,
-                'var' => $default,
-                'select' => $default,
+                'break' => true
             ]);
+        }
 
-            /*
-             * from()->{
-             *
-             * }
-             * ->insert(`table`, [
-             *      'field1' => $table->field1,
-             *      'field2' => $table->field2
-             * ])
-             *
-             * from('left', $table, 'distinct', new Raw("$table1->id = $tabke2->id"), [
-             *      sql::from()
-             * ])
-             *
-             *
-             * update->
-             *     if ()->{"
-             *          $var->field = 1,
-             *          $var->field2 = 3
-             *     "}->else->{
-             *
-             *      }
-             *     $table => [
-             *          'field1' => $table->field1,
-             *          'field2' => $table->field2
-             *     ],
-             *     $table => [
-             *          'field1' => $table->field1,
-             *          'field2' => $table->field2
-             *     ]
-             * ])
-             *
-             * UPDATE `table`
-             * SET `field1`=1, `field2`=2...
-             *
-             *
-             * select([
-             *     $table->field,
-             *     'alias' => $table->field,
-             *     'string key' => Raw,
-             *     Raw => 'string value'
-             * ])
-             *
-             *
-             * */
+        $query($structure);
+    }
 
-            $root = new Structure(function(Structure $root) use(&$result) {
-                $type = $root->getVariant(
-                    ['update', 'from' => [0], 'insert' => 0, 'delete' => 0, 'select' => 0, 'table' => [0]],
-                    ['insert', 'from' => [0], 'update' => 0, 'delete' => 0, 'select' => 0, 'table' => [0]],
-                    ['delete', 'from' => [0], 'insert' => 0, 'update' => 0, 'select' => 0, 'table' => [0]],
-                    ['select', 'from' => [0], 'insert' => 0, 'delete' => 0, 'update' => 0, 'table' => [0]]
-                );
-                $result = [
-                    self::UPDATE_TYPE,
-                    self::INSERT_TYPE,
-                    self::DELETE_TYPE,
-                    self::SELECT_TYPE,
-                ][$type];
-                return true;
-            }, [
-                'from' => $from,
-                'insert' => $default,
-                'update' => $default,
-                'delete' => true,
-                'select' => $default,
-                'table'  => true,
-            ]);
-        };
-        $root($structure);
+    /**
+     * @param array $arguments
+     *
+     * @throws \Exception
+     *
+     * @return object
+     */
+    private function getFromStructure(array $arguments)
+    {
+        if (!isset($arguments[0])) {
+            throw new \Exception('incorrect type argument 1');
+        }
+
+        $container = $arguments[0];
+
+        if (count(AbstractRecord::getRecord($container)->getSequence())) {
+            throw new \Exception('invalid record field');
+        }
+        if (!isset($arguments[1])) {
+            $type = 0;
+        }
+        elseif (!is_numeric($arguments[1])) {
+            $type = $arguments[1];
+        }
+        else {
+            $stringType = strtolower($arguments[1]);
+            $flags = self::QUERY_FLAGS;
+
+            if (isset($flags[$stringType])) {
+                $type = $flags[$stringType];
+            }
+            else {
+                $type = 0;
+            }
+        }
+        if (isset($arguments[2])) {
+            $limit = $arguments[2];
+            $offset = isset($arguments[3]) ? $arguments[3] : 0;
+        }
+        else {
+            $limit = null;
+            $offset = 0;
+        }
+
+        return (object) [
+            'container' => $container,
+            'type' => $type,
+            'limit' => $limit,
+            'offset' => $offset,
+        ];
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     * @param string $type
+     *
+     * @return object
+     *
+     * @throws \Exception
+     */
+    private function getQueryStructure(array $arguments, array $children, $rootAsRaw = false, $type = self::SELECT_TYPE)
+    {
+        $result = $this->getFromStructure($arguments);
+        $record = AbstractRecord::getRecord($arguments[0]);
+        $conditions = [];
+
+        foreach ($children as $child) {
+            $name = $child->getName();
+
+            if (in_array($name, ['if', 'switch', 'return', 'break'])) {
+                $conditions[] = $child;
+                continue;
+            }
+
+            $method = 'get' . ucfirst($name) . 'Structure';
+            $record->add($name,
+                $this->{$method}($child->getArguments(), $child->getChildren(), $rootAsRaw)
+            );
+        }
+
+        $record->add('condition',
+            $this->getConditionsStructure($conditions, $rootAsRaw, $type)
+        );
+
         return $result;
+    }
+
+    /**
+     * @param Link[] $structure
+     * @param array $switches
+     *
+     * @return array
+     */
+    private function structureToList(array $structure, array $switches = [])
+    {
+        $result = [];
+
+        foreach ($structure as $pos => $link) {
+            $name = $link->getName(Link::TYPE_LOWER);
+
+            if ($name === 'return') {
+                $arguments = $link->getArguments();
+                $result[] = (object) [
+                    'type' => $name,
+                    'field' => array_shift($arguments),
+                    'value' => $arguments,
+                ];
+            }
+            elseif ($name === 'break') {
+                //use switches
+                $arguments = $link->getArguments();
+                $level = count($arguments) ? max(1, (int) $arguments[0]) : 1;
+
+                
+            }
+            else {
+                $subSwitches = $switches;
+
+                if ($name === 'switch') {
+                    $subSwitches[] = array_slice($structure, $pos + 1);
+                }
+
+                $children = $this->structureToList(
+                    $link->getChildren(), $subSwitches
+                );
+
+                foreach ($children as $child) {
+
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param Link[] $structure
+     * @param bool $rootAsRaw
+     * @param string $type
+     *
+     * @return object
+     */
+    private function getConditionsStructure(array $structure, $rootAsRaw = false, $type = self::SELECT_TYPE)
+    {
+        /**
+         * if
+         * switch
+         * break
+         * action
+         *
+         * arguments =
+         *
+         *
+         * to switch conditions
+         *
+         * for select, update, insert
+         *
+         * `field` = condition()
+         * or var.`field` = condition()
+         */
+
+        /**
+         * from(
+         *  if (cond1)
+         *     q
+         *
+         *
+         * )$var
+         *
+         *
+         *
+         * Важны не только условия установки конкретного поля, но и последовательность(или нет?)
+         *
+         * поля не влияют друг на друга
+         * важен анализ вложенности break-ов
+         *
+         * собираем условия для каждого поля отдельно
+         * включая бряки
+         *
+         * как собрать switch?
+         *
+         *
+         */
+
+
+
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getSelectStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getUpdateStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getInsertStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getDeleteStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getVarStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getOrderByStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
+    }
+
+    /**
+     * @param array $arguments
+     * @param array $children
+     * @param bool $rootAsRaw
+     */
+    private function getGroupByStructure(array $arguments, array $children, $rootAsRaw = false)
+    {
+
     }
 
     /**
@@ -258,17 +572,24 @@ class Builder
 
         if ($structure instanceof \Closure) {
             $rootAsRaw = true;
-            $structure = $structure(ParserAbstract::TYPE_QUERY);
+            $queryOption = $structure(ParserAbstract::TYPE_QUERY);
+            $structure = $queryOption->topology;
         }
         else {
             $rootAsRaw = false;
+            $queryOption = (object) [
+                'limit' => [],
+                'distinct' => false,
+            ];
         }
 
-        $questionType = $this->getQuestionType($structure);
-
-
-
-        var_dump($structure);
+        $this->validateStructure($structure);
+        $result = $this->getQueryStructure([
+                Query::create(),
+                $queryOption->distinct ? self::QUERY_FLAG_DISTINCT : 0
+            ], $structure, $rootAsRaw, $this->type
+        );
+        var_dump($this->type);die;
 
 
 

@@ -1,6 +1,7 @@
 <?php namespace EugeneErg\SQLPreprocessor\Record;
 
 use EugeneErg\SQLPreprocessor\Link;
+use mysql_xdevapi\Exception;
 
 /**
  * Class AbstractRecord
@@ -70,7 +71,7 @@ abstract class AbstractRecord
     }
 
     /**
-     * @return Link[]
+     * @return Link[]|object
      */
     public function getSequence()
     {
@@ -150,28 +151,30 @@ abstract class AbstractRecord
 
     /**
      * @param Container $container
+     *
      * @return static
+     *
+     * @throws \Exception
      */
     public static function getRecord(Container $container)
     {
+        if (!isset(self::$records["$container"]->class)
+            || !is_subclass_of(self::$records["$container"]->class, static::class)
+        ) {
+            throw new \Exception('invalid container');
+        }
         if (isset(self::$records["$container"]->self)) {
             return self::$records["$container"]->self;
         }
-        $class = self::$records["$container"]->class;
-        if (self::$records["$container"]->root !== $container) {
-            $root = self::getRecord(self::$records["$container"]->root);
-        }
-        else {
-            $root = null;
-        }
-        self::$records["$container"]->self = new $class(
+
+        return self::$records["$container"]->self = new self::$records["$container"]->class(
             self::$records["$container"]->object,
             $container,
             self::$records["$container"]->sequence,
             self::$records["$container"]->parent,
-            $root
+            self::$records["$container"]->root === $container ? null
+                : self::getRecord(self::$records["$container"]->root)
         );
-        return self::$records["$container"]->self;
     }
 
     public function getContainer()

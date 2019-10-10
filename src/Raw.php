@@ -33,6 +33,7 @@ class Raw
 
     /**
      * Builder constructor.
+     *
      * @param string $string
      * @param ParserAbstract $parser
      */
@@ -46,6 +47,7 @@ class Raw
     /**
      * @param $parser
      * @param array $arguments
+     *
      * @return Raw
      */
     public static function __callStatic($parser, array $arguments)
@@ -62,12 +64,14 @@ class Raw
         if (!is_subclass_of($class, ParserAbstract::class)) {
             throw ParseException::incorrectParserClass($class);
         }
+
         self::$parsers[$alias] = $class;
     }
 
     /**
      * @param array $patterns
      * @param string $string
+     *
      * @return object[]
      */
     private function getIteration(array $patterns, &$string)
@@ -79,12 +83,15 @@ class Raw
         unset($matches[0]);
         $results = [];
         $types = array_keys($patterns);
+
         foreach ($matches as $typeNumber => $variants) {
             $class = $types[$typeNumber - 1];
+
             foreach ($variants as $variant) {
                 if (!empty($variant) && $variant[0] !== '') {
                     $size = strlen($variant[0]);
                     $replacement = str_repeat(' ', $size);
+
                     if (is_subclass_of($class, StructureItem::class)) {
                         $results[$variant[1]] = (object) [
                             'class' => $class,
@@ -94,6 +101,7 @@ class Raw
                             "/" . $class::INCLUDE_TEMPLATE . "/",
                             $variant[0], $replaces, PREG_OFFSET_CAPTURE
                         );
+
                         foreach ($replaces[0] as $replace) {
                             $replacement = substr_replace($replacement, $replace[0], $replace[1], strlen($replace[0]));
                         }
@@ -104,10 +112,12 @@ class Raw
                             'size' => $size,
                         ];
                     }
+
                     $string = substr_replace($string, $replacement, $variant[1], $size);
                 }
             }
         }
+
         return $results;
     }
 
@@ -115,6 +125,7 @@ class Raw
      * @param object[] $items
      * @param int $size
      * @param int $pos
+     *
      * @return mixed|object|null
      */
     private function unionContext(array $items, $size, $pos)
@@ -124,6 +135,7 @@ class Raw
             'text' => '',
         ];
         $returnFirst = $items[$pos++];
+
         while ($pos < $size) {
             if (!isset($items[$pos])) {
                 $pos++;
@@ -132,15 +144,19 @@ class Raw
             if (!isset($items[$pos]->object) || !$items[$pos]->object instanceof Context) {
                 break;
             }
+
             $returnFirst = null;
             $result->size += $items[$pos]->size;
             $pos += $items[$pos]->size;
             $result->text .= $items[$pos]->getValue();
         }
+
         if ($returnFirst) {
             return $returnFirst;
         }
+
         $result->object = new Context($result->text);
+
         return $result;
     }
 
@@ -148,32 +164,39 @@ class Raw
      * @param object[] $items
      * @param int|null $size
      * @param int $pos
-     * @return Item[]
+     *
+     * @return Raw\Item[]
      */
     private function getStructure(array $items, $size, $pos = 0)
     {
         $size += $pos;
         $result = [];
+
         while ($pos < $size) {
             if (!isset($items[$pos])) {
                 $pos++;
                 continue;
             }
+
             $block = $items[$pos];
+
             if (!isset($block->object)) {
                 $block->object = new $block->class(new Items($this->getStructure($items, $block->size, $pos + 1)));
             }
             elseif ($block->object instanceof Context) {
                 $block = $this->unionContext($items, $size, $pos);
             }
+
             $result[] = $block->object;
             $pos += $block->size;
         }
+
         return $result;
     }
 
     /**
      * @param string $type
+     *
      * @return Link[]
      */
     public function parse($type = ParserAbstract::TYPE_QUERY)
