@@ -1,21 +1,29 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+/**
+ * Class LogicStructureConverter
+ * @package EugeneErg\SQLPreprocessor
+ */
 class LogicStructureConverter
 {
+    /**
+     * LogicStructureConverter constructor.
+     */
     private function __construct() {}
 
     /**
      * @param Link[] $structure
      * @param \Closure|null $callback
+     *
+     * @return Link[][]
      */
     public static function toList(array $structure, \Closure $callback = null)
     {
         $structure = self::argumentsToObjects($structure);
         $structure = self::getRidOfSwitch($structure);
         $structure = self::getRidOfBreak($structure);
-        self::createStructuresByFields($structure, $callback);
 
-        //$structure = self::optimizeConditions($structure);
+        return self::createStructuresByFields($structure, $callback);
     }
 
     /**
@@ -29,10 +37,10 @@ class LogicStructureConverter
         $conditionChain = [];
 
         foreach ($structure as $pos => $link) {
-            if ($link->getName() === 'result') {
+            if ($link->getName() === 'set') {
                 $arguments = $link->getArguments();
                 $fieldName = array_shift($arguments);
-                $results[$fieldName][$pos] = ['link' => new Link('result', $arguments)];
+                $results[$fieldName][$pos] = ['link' => new Link('set', $arguments)];
                 $conditionChain = [];
             }
             else {
@@ -65,47 +73,12 @@ class LogicStructureConverter
     }
 
     /**
-     * @param Link[] $structure
-     * @param \Closure|null $callback
+     * @param Link[][]|array[] $structure
+     * @param mixed $default
      *
      * @return Link[]
      */
-    private static function createStructuresByFields(array $structure, \Closure $callback = null)
-    {
-        $result = self::findAllResults($structure);
-        $fieldValues = [];
-
-        foreach ($structure as $fieldName => $conditions) {
-            $result[$fieldName] = self::createSingleConditions(
-                $conditions, $callback
-                ? function() use($callback, $fieldName, &$fieldValues) {
-                    if (array_key_exists($fieldName, $fieldValues)) {
-                        return $fieldValues[$fieldName];
-                    }
-
-                    return $fieldValues[$fieldName] = $callback($fieldName);
-                }
-                : null
-            );
-        }
-
-        return $result;
-    }
-
-    private static function isSingleIf(array $structure, $pos = 0)
-    {
-        return isset($structure[$pos + 1])
-            && $structure[$pos]->getName() === 'if'
-            && !in_array($structure[$pos + 1]->getName(), ['elseif', 'else']);
-    }
-
-    /**
-     * @param Link[][][]|array[] $structure
-     * @param mixed $callback
-     *
-     * @return Link[]
-     */
-    private static function createSingleConditions(array $structure, $callback)
+    private static function createSingleConditions(array $structure, $default)
     {
         //if elseif else return
         /**
@@ -156,6 +129,8 @@ class LogicStructureConverter
          * elseif !c2 !c4 c5 +
          * else -
          *
+         * if c1+
+         *
          *
          *
          *
@@ -173,13 +148,13 @@ class LogicStructureConverter
             return $lastItem;
         }
         if (count($structure)) {
-            $default = self::createSingleConditions($structure, $callback);
+            $default = self::createSingleConditions($structure, $default);
         }
-        elseif ($callback instanceof \Closure) {
-            $default = [$callback()];
+        elseif ($default instanceof \Closure) {
+            $default = [$default()];
         }
-        else {
-            $default = [$callback];
+        elseif (!is_array($default)) {
+            $default = [$default];
         }
 
         ksort($lastItem);
@@ -193,7 +168,7 @@ class LogicStructureConverter
                 if (count($notCondition) > 1) {
                     $result[] = $newLink = new Link(count($result) ? 'elseif' : 'if', $notCondition);
                     $notCondition = ['or'];
-                    $newLink->setChildren([$default]);
+                    $newLink->setChildren($default);
                 }
 
                 $link->setChildren(self::createSingleConditions($option['children'], $default));
@@ -209,7 +184,35 @@ class LogicStructureConverter
 
         if (count($notCondition) > 1) {
             $result[] = $newLink = new Link('else', $notCondition);
-            $newLink->setChildren([$default]);
+            $newLink->setChildren($default);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param Link[] $structure
+     * @param \Closure|null $callback
+     *
+     * @return Link[][]
+     */
+    private static function createStructuresByFields(array $structure, \Closure $callback = null)
+    {
+        $result = self::findAllResults($structure);
+        $fieldValues = [];
+
+        foreach ($structure as $fieldName => $conditions) {
+            $result[$fieldName] = self::createSingleConditions(
+                $conditions, $callback
+                ? function() use($callback, $fieldName, &$fieldValues) {
+                    if (!array_key_exists($fieldName, $fieldValues)) {
+                        $fieldValues[$fieldName] = $callback($fieldName);
+                    }
+
+                    return $fieldValues[$fieldName];
+                }
+                : null
+            );
         }
 
         return $result;
@@ -230,7 +233,7 @@ class LogicStructureConverter
                 case 'break':
                     $result[] = new Link($name, max(1, (int) reset($link->getArguments())));
                     break;
-                case 'result':
+                case 'set':
                     $result[] = $link;
                     break;
                 case 'if':
@@ -374,11 +377,16 @@ class LogicStructureConverter
         foreach ($structure as $pos => $link) {
             $name = $link->getName();
 
-            if (!in_array($name, ['elseif', 'else']) && count($breakConditions) > 1) {
-                $result[] = $newLink = new Link('if', $breakConditions);
-                $newLink->setChildren(self::getRidOfBreak(array_slice($structure, $pos), $breaks));
+            if (!in_array($name, ['elseif', 'else'])) {
+                if ($breakConditions === false) {
+                    return $result;
+                }
+                if (count($breakConditions) > 1) {
+                    $result[] = $newLink = new Link('if', $breakConditions);
+                    $newLink->setChildren(self::getRidOfBreak(array_slice($structure, $pos), $breaks));
 
-                return $result;
+                    return $result;
+                }
             }
             if ($name === 'break') {
                 $level = $link->getArguments()[0] - 1;
@@ -395,7 +403,7 @@ class LogicStructureConverter
 
                 return $result;
             }
-            if ($name === 'return') {
+            if ($name === 'set') {
                 $result[] = $link;
                 $chainConditions = [];
                 continue;
@@ -438,11 +446,14 @@ class LogicStructureConverter
 
                 foreach ($newBreaks as $level => $conditions) {
                     if ($conditions === false) {
-                        $conditions = $breakCondition;
+                        $newBreaks[$level] = $breakCondition === false ? $breakCondition : ['and', $breakCondition];
                     }
                     elseif ($breakCondition !== false) {
-                        $conditions[] = $breakCondition;
+                        $newBreaks[$level][] = $breakCondition;
                     }
+                }
+
+                foreach ($newBreaks as $level => $conditions) {
                     if ($conditions === false || (isset($breaks[$level]) && $breaks[$level] === false)) {
                         $breaks[$level] = false;
                     }
@@ -454,11 +465,15 @@ class LogicStructureConverter
                     }
                 }
 
-                if ($breakCondition === false) {
-                    $breakConditions = array_merge($breakConditions, $newBreaks);
-                }
-                else {
-                    $breakConditions = array_merge($breakConditions, $breakCondition, $newBreaks);
+                if ($breakConditions !== false) {
+                    if (in_array(false, $newBreaks, true)) {
+                        $breakConditions = false;
+                    }
+                    else {
+                        $breakConditions = $breakCondition === false
+                            ? array_merge($breakConditions, $newBreaks)
+                            : array_merge($breakConditions, $breakCondition, $newBreaks);
+                    }
                 }
             }
         }

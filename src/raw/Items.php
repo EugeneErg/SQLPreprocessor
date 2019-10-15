@@ -1,6 +1,5 @@
 <?php namespace EugeneErg\SQLPreprocessor\Raw;
 
-use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Raw;
 
 /**

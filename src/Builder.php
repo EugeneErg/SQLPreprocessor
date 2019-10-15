@@ -90,6 +90,7 @@ class Builder
         'groupby' => Topology::PARENT_TYPE,
         'break',
         'from',
+        'set',
         'switch' => ['case', 'default'],
     ];
 
@@ -108,13 +109,13 @@ class Builder
         $objectFromHash = Hasher::getObject($value);
 
         if ($objectFromHash instanceof Variable) {
-            return new Link('return', [$objectFromHash], true);
+            return new Link('set', [$objectFromHash], true);
         }
         if ($objectFromHash instanceof Raw) {
             return $objectFromHash;
         }
 
-        return new Link('return', [$value], true);
+        return new Link('set', [$value], true);
     }
 
     /**
@@ -222,26 +223,23 @@ class Builder
         return new self();
     }
 
-    public function function_Name()
-    {
-        /*
-         * типы блоков
-         * 1) слово (не содержит дочерних блоков)
-         * 2) включающая последовательность (
-         *        текущий блок становится дочерним к себе,
-         *        там же дочерними становятся блоки, не соотвествующие шаблону,
-         *        а соотвествующие становятся соседними
-         *        пока последовательность не завершится
-         *    )
-         * 4) родитель (все следующие блоки становятся дочерними)
-         *
-         * все блоки кроме (1) и кроме дочерних последовательностей могут завершаться ключевыми блоками {name}end
-         * все блоки кроме (1) могут включать дочерние через фигурные скобки
-         *
-         */
+    /*
+     * типы блоков
+     * 1) слово (не содержит дочерних блоков)
+     * 2) включающая последовательность (
+     *        текущий блок становится дочерним к себе,
+     *        там же дочерними становятся блоки, не соотвествующие шаблону,
+     *        а соотвествующие становятся соседними
+     *        пока последовательность не завершится
+     *    )
+     * 4) родитель (все следующие блоки становятся дочерними)
+     *
+     * все блоки кроме (1) и кроме дочерних последовательностей могут завершаться ключевыми блоками {name}end
+     * все блоки кроме (1) могут включать дочерние через фигурные скобки
+     *
+     */
 
 
-    }
 
     /**
      * @param array $structure
@@ -280,7 +278,7 @@ class Builder
             $default->addChildren([
                 'if' => $if,
                 'switch' => $switch,
-                'return' => true,
+                'set' => true,
                 'break' => true
             ]);
             $query = new Structure();
@@ -291,7 +289,7 @@ class Builder
                 'groupby' => $default,
                 'if' => $if,
                 'switch' => $switch,
-                'return' => true,
+                'set' => true,
                 'break' => true
             ]);
         }

@@ -228,7 +228,7 @@ class Special extends ParserAbstract
             $parts = $items->explode(',|;');
             $result = [];
             foreach ($parts as $part) {
-                $result[] = new Link('return', $this->getSequence($part, self::TYPE_ARGUMENT), true);
+                $result[] = new Link('set', $this->getSequence($part, self::TYPE_ARGUMENT), true);
             }
             return $result;
         });
@@ -276,7 +276,7 @@ class Special extends ParserAbstract
                 else {
                     $order = 'asc';
                 }*/
-                $result[] = new Link('return', $this->getSequence($part, self::TYPE_ARGUMENT, true));
+                $result[] = new Link('set', $this->getSequence($part, self::TYPE_ARGUMENT, true));
             }
 
             return $result;
@@ -286,13 +286,24 @@ class Special extends ParserAbstract
     /**
      * @return int|null
      */
-    private function geNextBlock()
+    private function getNextQueryBlock()
     {
         return $this->items->pos([Raw\Item\Word::class => [
             'ORDER', 'GROUP',
             'FROM', 'LEFT', 'JOIN', 'RIGHT', 'INNER', 'OUTER', 'CORRELATE', 'UNION',
             'LIMIT','OFFSET', 'DISTINCT',
         ]], 0, Raw\Items::POS_FLAG_UPPER_CASE);
+    }
+
+    /**
+     * @return int|null
+     */
+    private function getNextConditionBlock()
+    {
+        return $this->items->pos([Raw\Item\Word::class => [
+            'switch', 'case', 'default', 'break', 'endswitch',
+            'if', 'elseif', 'else', 'endif',
+        ]], 0, Raw\Items::POS_FLAG_LOWER_CASE);
     }
 
     /**
@@ -317,7 +328,8 @@ class Special extends ParserAbstract
          *     }
          * }
          */
-        return self::getDefaultWithCallback(function(Raw\Items $items) {
+        return $this->getDefaultSequence();
+        /*self::getDefaultWithCallback(function(Raw\Items $items) {
             $parts = $items->explode(',|;');
             $results = [];
 
@@ -349,14 +361,14 @@ class Special extends ParserAbstract
                 ) {
                     throw ParseException::incorrectLink($field);
                 }
-                */
-                $results[] = new Link('return',
+                *
+                $results[] = new Link('set',
                     $this->getSequence($part, self::TYPE_ARGUMENT), true
                 );
             }
 
             return $results;
-        });
+        });*/
     }
 
     private function getReturns(Raw\Items $items)
@@ -366,7 +378,7 @@ class Special extends ParserAbstract
 
         foreach ($parts as $part) {
             if (count($part)) {
-                $results[] = new Link('return',
+                $results[] = new Link('set',
                     $this->getSequence($part, self::TYPE_ARGUMENT), true
                 );
             }
@@ -378,98 +390,87 @@ class Special extends ParserAbstract
     public function getDefaultSequence()
     {
         $result = [];
-        $return = [];
 
-        for ($num = 0; $num < count($this->items); $num++) {
-            $item = $this->items[$num];
+        while (count($this->items)) {
+            $pos = $this->getNextConditionBlock();
+            
+            if (is_null($pos)) {
+                $pos = count($this->items);
+            }
+            if ($pos) {
+                $sets = $this->items->splice(0, $pos)->explode(',|;');
 
-            if ($item instanceof Raw\Item\Word) {
-                $word = strtolower($item->getValue());
-
-                switch ($word) {
-                    case 'break':
-                        if (!isset($this->items[$num + 1])
-                            || !$this->items[$num + 1] instanceof Raw\Item\Parenthesis
-                        ) {
-                            $result[] = new Link($word);
-                            break;
-                        }
-
-                        $breakValue = $this->items[$num + 1]->getValue();
-
-                        if (count($breakValue) !== 1
-                            || !$breakValue[0] instanceof Raw\Item\Number
-                            || $breakValue[0]->getValue() < 0
-                        ) {
-                            throw ParseException::incorrectLink($item);
-                        }
-
-                        $result[] = new Link($word, [$breakValue[0]->getValue()], true);
-                        break;
-                    case 'if':
-                    case 'elseif':
-                    case 'switch':
-                        if (!isset($this->items[$num + 1])
-                            || !$this->items[$num + 1] instanceof Raw\Item\Parenthesis
-                            || !count($this->items[$num + 1]->getValue())
-                        ) {
-                            throw ParseException::incorrectLink($item);
-                        }
-                        if (count($return)) {
-                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
-                            $return = [];
-                        }
-
-                        $result[] = new Link(
-                            $item->getValue(), $this->getSequence(
-                                $this->items[$num + 1]->getValue(), self::TYPE_ARGUMENT
-                            ), true
-                        );
-
-                        $num++;
-                        break;
-                    case 'case'://WORD ... :
-                        //substr('','','')
-                        $pos = $this->items->pos(':', $num);
-
-                        if (is_null($pos)) {
-                            throw ParseException::ewfer(':');
-                        }
-                        if (count($return)) {
-                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
-                            $return = [];
-                        }
-
-                        $result[] = new Link($item->getValue(), [
-                            $this->getSequence(
-                                $this->items->splice($num + 1, $pos - $num - 1),
-                                self::TYPE_ARGUMENT
-                            )
-                        ], true);
-                        $num++;
-                        break;
-                    case 'else':
-                    case 'default':
-                    case 'endif':
-                    case 'endswitch':
-                        if (count($return)) {
-                            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
-                            $return = [];
-                        }
-
-                        $result[] = new Link($item->getValue());
-                        break;
-                    default://other
-                        $return[] = $item;
+                foreach ($sets as $set) {
+                    if (count($set)) {
+                        $result[] = new Link('set', $this->getSequence($set, self::TYPE_ARGUMENT));
+                    }
                 }
             }
-            else {
-                $return[] = $item;
+            if (!count($this->items)) {
+                return $result;
             }
-        }
 
-        if (count($return)) {
-            $result = array_merge($result, $this->getReturns(new Raw\Items($return)));
+            $item = $this->items[0];
+            unset($this->items[0]);
+            $word = strtolower($item->getValue());
+            
+            switch ($word) {
+                case 'break':
+                    if (!isset($this->items[0])
+                        || !$this->items[0] instanceof Raw\Item\Parenthesis
+                    ) {
+                        $result[] = new Link($word);
+                        break;
+                    }
+
+                    $breakValue = $this->items[0]->getValue();
+                    unset($this->items[0]);
+
+                    if (count($breakValue) !== 1
+                        || !$breakValue[0] instanceof Raw\Item\Number
+                        || $breakValue[0]->getValue() < 0
+                    ) {
+                        throw ParseException::incorrectLink($item);
+                    }
+
+                    $result[] = new Link($word, [$breakValue[0]->getValue()], true);
+                    break;
+                case 'if':
+                case 'elseif':
+                case 'switch':
+                    if (!isset($this->items[0])
+                        || !$this->items[0] instanceof Raw\Item\Parenthesis
+                        || !count($this->items[0]->getValue())
+                    ) {
+                        throw ParseException::incorrectLink($item);
+                    }
+
+                    $result[] = new Link(
+                        $word, $this->getSequence(
+                            $this->items[0]->getValue(), self::TYPE_ARGUMENT
+                        ), true
+                    );
+
+                    unset($this->items[0]);
+                    break;
+                case 'case'://WORD ... :
+
+                    $pos = $this->items->pos(':');
+
+                    if (is_null($pos)) {
+                        throw ParseException::ewfer(':');
+                    }
+
+                    $result[] = new Link($word, [
+                        $this->getSequence(
+                            $this->items->splice(0, $pos),
+                            self::TYPE_ARGUMENT
+                        )
+                    ], true);
+                    break;
+                default:
+                    $result[] = new Link($word);
+            }
         }
 
         return $result;
@@ -505,9 +506,9 @@ class Special extends ParserAbstract
             'distinct' => false,
             'sequence' => []
         ];
-        $pos = $this->geNextBlock();
+        $pos = $this->getNextQueryBlock();
 
-        //всё что до, это селект/апдейт/инсерт/делит
+        //всё что до, это set
         if ($pos) {
             $part = $this->items->splice(0, $pos);
             $result->sequence = $this->getSequence($part, 'default');
@@ -520,7 +521,7 @@ class Special extends ParserAbstract
             $blockName = strtolower($this->items[0]->getValue());
             unset($this->items[0]);
 
-            if (null === $pos = $this->geNextBlock()) {
+            if (null === $pos = $this->getNextQueryBlock()) {
                 $pos = count($this->items);
             }
 
