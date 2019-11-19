@@ -36,7 +36,7 @@ class Special extends ParserAbstract
      */
     public function getInsertSequence()
     {
-        return $this->getSelectSequence();
+        return $this->getDefaultSequence();
     }
 
     private function getWordAttribute(Raw\Item\Word $item, &$activeItem, &$num)
@@ -292,6 +292,7 @@ class Special extends ParserAbstract
             'ORDER', 'GROUP',
             'FROM', 'LEFT', 'JOIN', 'RIGHT', 'INNER', 'OUTER', 'CORRELATE', 'UNION',
             'LIMIT','OFFSET', 'DISTINCT',
+            'WHERE', 'ON', 'HAVING',
         ]], 0, Raw\Items::POS_FLAG_UPPER_CASE);
     }
 
@@ -301,7 +302,7 @@ class Special extends ParserAbstract
     private function getNextConditionBlock()
     {
         return $this->items->pos([Raw\Item\Word::class => [
-            'switch', 'case', 'default', 'break', 'endswitch',
+            'switch', 'case', 'default', 'endswitch',
             'if', 'elseif', 'else', 'endif',
         ]], 0, Raw\Items::POS_FLAG_LOWER_CASE);
     }
@@ -312,7 +313,7 @@ class Special extends ParserAbstract
     public function getSelectSequence()
     {
         /**
-         * SELECT|UPDATE
+         * SELECT|UPDATE|INSERT
          *     field_name_one = 'string',
          *     if (condition_1)
          *          field_name_two = 'string_two'
@@ -329,6 +330,69 @@ class Special extends ParserAbstract
          * }
          */
         return $this->getDefaultSequence();
+
+        return $this->getDefaultSequence(function(Raw\Items $items) {
+            $field = $items[0];
+            
+            if (isset($items[1])
+                && !($items[1] instanceof Raw\Item\Context
+                    && $items[1]->getValue()[0] === '=')
+            ) {
+                throw ParseException::incorrectLink($items[1]);
+            }
+            if ($field instanceof Raw\Item\String
+                || $field instanceof Raw\Item\Word
+            ) {
+                if (count($items) < 3) {
+                    throw ParseException::incorrectCountArguments(count($items), 3);
+                }
+
+                $fieldName = $field->getValue();
+                unset($items[0]);
+            }
+            elseif ($field instanceof Raw\Item\Field) {
+                $record = FieldTable::getRecord($field->getValue());
+                $sequence = $record->getSequence();
+
+                if (count($sequence)) {
+                    throw ParseException::incorrectLink($field);
+                }
+                
+                $tableName = $record->getTableName();
+                
+                if (count($tableName) > 1 && count($items) > 1) {
+                    throw ParseException::incorrectCountArguments(count($items), 0, 1);
+                }
+                if (count($items) > 1) {
+                    unset($items[0]);
+                }
+                
+                $fieldName = end($tableName);
+            }
+            else {
+                throw ParseException::incorrectLink($field);
+            }
+
+            if (count($items) > 1) {
+                if (isset($items[0])
+                    && !($items[0] instanceof Raw\Item\Context
+                        && $items[0]->getValue()[0] === '='
+                    )
+                ) {
+                    if (count($items) === 1) {
+                        throw ParseException::incorrectCountArguments(1, 0, 0);
+                    }
+                    if ($items[0]->getValue() === '=') {
+                        unset($items[0]);
+                    }
+                    else {
+                        $items[0] = new Raw\Item\Context(substr($items[0]->getValue(), 1));
+                    }
+                }
+            }
+
+            return $items->splice(0, 0, new Raw\Items([new Raw\Item\Word($fieldName)]));
+        });
         /*self::getDefaultWithCallback(function(Raw\Items $items) {
             $parts = $items->explode(',|;');
             $results = [];
@@ -401,8 +465,14 @@ class Special extends ParserAbstract
                 $sets = $this->items->splice(0, $pos)->explode(',|;');
 
                 foreach ($sets as $set) {
-                    if (count($set)) {
-                        $result[] = new Link('set', $this->getSequence($set, self::TYPE_ARGUMENT));
+                    if (count($set)
+                        && !(count($set) === 1
+                            && $set[0] instanceof Raw\Item\Context
+                            && $set[0]->getValue() === '')
+                    ) {
+                        $result[] = new Link('set',
+                            $this->getSequence($set, self::TYPE_ARGUMENT)
+                        );
                     }
                 }
             }
@@ -415,26 +485,6 @@ class Special extends ParserAbstract
             $word = strtolower($item->getValue());
             
             switch ($word) {
-                case 'break':
-                    if (!isset($this->items[0])
-                        || !$this->items[0] instanceof Raw\Item\Parenthesis
-                    ) {
-                        $result[] = new Link($word);
-                        break;
-                    }
-
-                    $breakValue = $this->items[0]->getValue();
-                    unset($this->items[0]);
-
-                    if (count($breakValue) !== 1
-                        || !$breakValue[0] instanceof Raw\Item\Number
-                        || $breakValue[0]->getValue() < 0
-                    ) {
-                        throw ParseException::incorrectLink($item);
-                    }
-
-                    $result[] = new Link($word, [$breakValue[0]->getValue()], true);
-                    break;
                 case 'if':
                 case 'elseif':
                 case 'switch':
@@ -454,20 +504,29 @@ class Special extends ParserAbstract
                     unset($this->items[0]);
                     break;
                 case 'case'://WORD ... :
+                    $parts = $this->items->explode(':', 2);
 
-                    $pos = $this->items->pos(':');
-
-                    if (is_null($pos)) {
+                    if (count($parts) < 2) {
                         throw ParseException::ewfer(':');
                     }
 
+                    $this->items = $parts[1];
                     $result[] = new Link($word, [
-                        $this->getSequence(
-                            $this->items->splice(0, $pos),
-                            self::TYPE_ARGUMENT
-                        )
+                        $this->getSequence($parts[0], self::TYPE_ARGUMENT)
                     ], true);
                     break;
+                case 'default':
+                    if (isset($this->items[0])
+                        && $this->items[0] instanceof Raw\Item\Context
+                        && substr($this->items[0]->getValue(), 0, 1) === ':'
+                    ) {
+                        if ($this->items[0]->getValue() === ':') {
+                            unset($this->items[0]);
+                        }
+                        else {
+                            $this->items[0] = new Raw\Item\Context(substr($this->items[0]->getValue(), 1));
+                        }
+                    }
                 default:
                     $result[] = new Link($word);
             }
@@ -528,6 +587,11 @@ class Special extends ParserAbstract
             $part = $this->items->splice(0, $pos);
 
             switch ($blockName) {
+                case 'where':
+                case 'on':
+                case 'having':
+                    $result->sequence[] = new Link('where', self::getSequence($part, 'argument'));
+                    break;
                 case 'left':
                 case 'right':
                 case 'cross':

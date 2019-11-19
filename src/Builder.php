@@ -57,7 +57,7 @@ class Builder
     const JOIN_TYPE_RIGHT = 2;
     const JOIN_TYPE_OUTER = 3;
     const JOIN_TYPE_CORRELATE = 4;
-    const QUERY_FLAG_UNION = 8;
+    const QUERY_FLAG_UNION = 12;
     const QUERY_FLAG_DISTINCT = 16;
 
     const QUERY_FLAGS = [
@@ -88,9 +88,10 @@ class Builder
         'query' => Topology::PARENT_TYPE,
         'orderby' => Topology::PARENT_TYPE,
         'groupby' => Topology::PARENT_TYPE,
-        'break',
         'from',
         'set',
+        'where',
+        'orwhere',
         'switch' => ['case', 'default'],
     ];
 
@@ -278,8 +279,7 @@ class Builder
             $default->addChildren([
                 'if' => $if,
                 'switch' => $switch,
-                'set' => true,
-                'break' => true
+                'set' => true
             ]);
             $query = new Structure();
             $query->addChildren([
@@ -290,7 +290,8 @@ class Builder
                 'if' => $if,
                 'switch' => $switch,
                 'set' => true,
-                'break' => true
+                'where' => true,//...raw|container|builder
+                'orwhere' => true,//...raw|container|builder
             ]);
         }
 
@@ -368,7 +369,7 @@ class Builder
         foreach ($children as $child) {
             $name = $child->getName();
 
-            if (in_array($name, ['if', 'switch', 'return', 'break'])) {
+            if (in_array($name, ['if', 'switch', 'set'])) {
                 $conditions[] = $child;
                 continue;
             }
@@ -380,10 +381,16 @@ class Builder
         }
 
         $record->add('condition',
-            $this->getConditionsStructure($conditions, $rootAsRaw, $type)
+            $this->getConditionsStructure($conditions, $result->container, $rootAsRaw, $type)
         );
 
         return $result;
+    }
+
+    private function getWhereStructure(
+        array $structure, Container $container, $rootAsRaw = false, $type = self::SELECT_TYPE
+    ) {
+
     }
 
     /**
@@ -436,17 +443,37 @@ class Builder
 
     /**
      * @param Link[] $structure
+     * @param Container $container
      * @param bool $rootAsRaw
      * @param string $type
      *
      * @return object
      */
-    private function getConditionsStructure(array $structure, $rootAsRaw = false, $type = self::SELECT_TYPE)
-    {
+    private function getConditionsStructure(
+        array $structure, Container $container, $rootAsRaw = false, $type = self::SELECT_TYPE
+    ) {
+        /**
+         * select - word, string, field, record
+         * update, insert, delete - field, record
+         *
+         * необходимо получить условия извлечения - те условия, при которых действия вообще возможны
+         * и условия обновления
+         * и установить дефолтные значения для
+         */
+        LogicStructureConverter::toList(
+            $structure,
+            function(Link $link) use($rootAsRaw, $container, $type) {
+
+            },
+            function($fieldName) use($rootAsRaw, $container, $type) {
+
+            }
+        );
+
+
         /**
          * if
          * switch
-         * break
          * action
          *
          * arguments =

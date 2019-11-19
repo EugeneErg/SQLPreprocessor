@@ -79,39 +79,58 @@ class Items implements \ArrayAccess, \Countable
     /**
      * @param string $delimiter
      * @param int $maxCount
+     *
      * @return self[]
      */
     public function explode($delimiter, $maxCount = 0)
     {
         $result = [];
         $partOfChain = [];
-        foreach ($this->items as $item) {
-            if ($item instanceof Raw\Item\Context
-                && count($result) !== $maxCount - 1
+        $this->pos(function($value, $item) use(&$result, &$partOfChain, $maxCount, $delimiter) {
+            if ((!$item instanceof Raw\Item\Context)
+                || count($result) === $maxCount - 1
             ) {
-                $strings = preg_split(
-                    "/{$delimiter}/", $item->getValue(),
-                    $maxCount - count($result) > 1 ? $maxCount - count($result) : -1
-                );
-                if (count($strings) === 1) {
-                    $partOfChain[] = $item;
-                    continue;
-                }
-                foreach ($strings as $string) {
-                    if (count($partOfChain)) {
-                        $result[] = new self($partOfChain);
-                    }
-                    $partOfChain = [new Raw\Item\Context($string)];
-                }
-                $partOfChain = [];
-            }
-            else {
                 $partOfChain[] = $item;
+
+                return false;
             }
-        }
+
+            $strings = preg_split(
+                "/{$delimiter}/", $value,
+                $maxCount ? $maxCount - count($result) : -1
+            );
+
+            if (count($strings) === 1) {
+                $partOfChain[] = $item;
+
+                return false;
+            }
+
+            $string = array_shift($strings);
+
+            if ($string !== '' || !count($partOfChain)) {
+                $partOfChain[] = new Raw\Item\Context($string);
+            }
+
+            $result[] = new self($partOfChain);
+            $string = array_pop($strings);
+            $partOfChain = [];
+
+            if ($string !== '') {
+                $partOfChain[] = new Raw\Item\Context($string);
+            }
+
+            foreach ($strings as $string) {
+                $result[] = new self([new Raw\Item\Context($string)]);
+            }
+
+            return false;
+        });
+
         if (count($partOfChain)) {
             $result[] = new self($partOfChain);
         }
+
         return $result;
     }
 

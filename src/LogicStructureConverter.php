@@ -1,5 +1,51 @@
 <?php namespace EugeneErg\SQLPreprocessor;
 
+/*
+ * if (c1) {
+ *
+ * }
+ * elseif (c2) {
+ *     break;
+ * }
+ * else {
+ *     break(2)
+ * }
+ *
+ * case
+ *     when c1 then 1
+ *     when c2 then 2
+ *     else 3
+ * end
+ *
+ *
+ * switch c1
+ *      case v1
+ *
+ *      case v2
+ *
+ *      case v3
+ *
+ *      case v4
+ *
+ *
+ * if (v1,v2,v3,v4) {
+ *     if (!v2) {
+ *         //
+ *         if (!v3) {
+ *             //
+ *         }
+ *     }
+ * }
+ * if (v2) {
+ *     //
+ *     if (v1)
+ * }
+ *
+ *
+ */
+
+
+
 /**
  * Class LogicStructureConverter
  * @package EugeneErg\SQLPreprocessor
@@ -7,64 +53,68 @@
 class LogicStructureConverter
 {
     /**
-     * LogicStructureConverter constructor.
+     * @var Link[]
      */
-    private function __construct() {}
+    private $structure;
 
     /**
+     * LogicStructureConverter constructor.
      * @param Link[] $structure
-     * @param \Closure|null $callback
-     *
-     * @return Link[][]
      */
-    public static function toList(array $structure, \Closure $callback = null)
+    public function __construct(array $structure)
     {
-        $structure = self::argumentsToObjects($structure);
-        $structure = self::getRidOfSwitch($structure);
-        $structure = self::getRidOfBreak($structure);
-
-        return self::createStructuresByFields($structure, $callback);
+        $this->structure = $structure;
     }
 
     /**
      * @param Link[] $structure
+     * @param \Closure $getFieldNameMethod
+     * @param \Closure|null $getDefaultValueMethod
      *
-     * @return array
+     * @return Link[][]
      */
-    private static function findAllResults(array $structure)
+    public static function toList(array $structure, \Closure $getFieldNameMethod, \Closure $getDefaultValueMethod = null)
+    {
+        $structure = self::argumentsToObjects($structure);
+        $structure = self::findAllResults($structure, $getFieldNameMethod);
+
+        return self::createStructuresByFields($structure, $getDefaultValueMethod);
+    }
+
+    /**
+     * @param Link[] $structure
+     * @param \Closure $callback
+     * @param bool $isBlock
+     *
+     * @return object[][]
+     */
+    private static function findAllResults(array $structure, \Closure $callback, $isBlock = false)
     {
         $results = [];
         $conditionChain = [];
 
         foreach ($structure as $pos => $link) {
             if ($link->getName() === 'set') {
-                $arguments = $link->getArguments();
-                $fieldName = array_shift($arguments);
-                $results[$fieldName][$pos] = ['link' => new Link('set', $arguments)];
+                list($fieldName, $link) = $callback($link);
+                $results[$fieldName][$pos] = (object) ['link' => $link];
                 $conditionChain = [];
             }
             else {
-                if ($link->getName() === 'if') {
+                if (!$isBlock) {
                     $conditionChain = [];
                 }
 
-                $conditionChain[$pos] = ['link' => $link];
-                $childResults = self::findAllResults($link->getChildren());
+                $childResults = self::findAllResults($link->getChildren(), $callback, !$isBlock);
 
                 foreach ($childResults as $fieldName => $values) {
-                    reset($conditionChain);
-                    $ifPos = key($conditionChain);
-
-                    $path = [$ifPos => $conditionChain];
-                    $path[$ifPos][$pos]['children'] = $values;
-
-                    if (isset($results[$fieldName])) {
-                        $results[$fieldName] = array_replace($results[$fieldName], $path);
-                        ksort($results[$fieldName]);
-                    }
-                    else {
-                        $results[$fieldName] = $path;
-                    }
+                    $path = $conditionChain;
+                    $results[$fieldName] = isset($results[$fieldName])
+                        ? array_replace($path, $results[$fieldName])
+                        : $path;
+                    $results[$fieldName][$pos] = (object) [
+                        'link' => $link,
+                        'children' => $values,
+                    ];
                 }
             }
         }
@@ -73,149 +123,195 @@ class LogicStructureConverter
     }
 
     /**
-     * @param Link[][]|array[] $structure
-     * @param mixed $default
-     *
-     * @return Link[]
+     * @param object[] $structure
+     * @param Link $default
+     * @return Link
      */
-    private static function createSingleConditions(array $structure, $default)
+    private static function createSingleIfConditions(array $structure, Link $default)
     {
-        //if elseif else return
-        /**
-         * if c1
-         *  -
-         * elseif c2
-         *  +
-         * elseif c3
-         *  -
-         * else
-         *  +
-         *
-         *
-         * if c4
-         *  +
-         * elseif c5
-         *  -
-         * elseif c6
-         *  +
-         *
-         *
-         * if c4 {
-         *  +
-         * }
-         * elseif c5 {
-         *   if c1
-         *    -
-         *   elseif c2
-         *    +
-         *   elseif c3
-         *    -
-         *   else
-         *    +
-         * }
-         * elseif c6 {
-         *  +
-         * }
-         *
-         *
-         * if c1 +
-         * elseif c2 -
-         * elseif c3 +
-         * elseif c4 -
-         * elseif c5 +
-         *
-         * if c1 +
-         * elseif !c2 c3 +
-         * elseif !c2 !c4 c5 +
-         * else -
-         *
-         * if c1+
-         *
-         *
-         *
-         *
-         * if_1 {if_2 {}} (not else) => if_1_2 {}
-         *
-         * if_1 {} if_2 {} =>
-         *
-         * (if elseif? else?)* => (if elseif? else?)?
-         *
-         */
+        $values = [$default];
+        $default = new Link('set', [0]);
+        $defaultConditions = ['or'];
+        $newStructure = [];
+        $hasElse = false;
 
-        $lastItem = array_pop($structure);
+        foreach ($structure as $item) {
+            $isElse = $item->link->getName() === 'else';
 
-        if (!is_array($lastItem)) {//return
-            return $lastItem;
-        }
-        if (count($structure)) {
-            $default = self::createSingleConditions($structure, $default);
-        }
-        elseif ($default instanceof \Closure) {
-            $default = [$default()];
-        }
-        elseif (!is_array($default)) {
-            $default = [$default];
-        }
-
-        ksort($lastItem);
-        $notCondition = ['or'];
-        $result = [];
-
-        foreach ($lastItem as $option) {
-            $link = $option['link'];
-
-            if (isset($option['children'])) {
-                if (count($notCondition) > 1) {
-                    $result[] = $newLink = new Link(count($result) ? 'elseif' : 'if', $notCondition);
-                    $notCondition = ['or'];
-                    $newLink->setChildren($default);
+            if (isset($item->children)) {
+                if (count($defaultConditions) > 1) {
+                    $newStructure[] = (object) [
+                        'condition' => $defaultConditions,
+                        'value' => $default,
+                        'type' => 'elseif',
+                    ];
+                    $defaultConditions = ['or'];
                 }
 
-                $link->setChildren(self::createSingleConditions($option['children'], $default));
-                $result[] = $link;
+                if ($isElse) {
+                    $hasElse = true;
+                }
+
+                $newStructure[] = (object) [
+                    'condition' => $item->link->getArguments(),
+                    'value' => new Link('set', [count($values)]),
+                    'type' => $item->link->getName(),
+                ];
+
+                $values[] = [self::createSingleDefaultConditions($item->children, $default)];
             }
-            elseif ($link->getName() === 'else') {
-                $notCondition = ['or'];
-            }
-            else {
-                $notCondition[] = $link->getArguments();
+            elseif (!$isElse) {
+                $defaultConditions[] = $item->link->getArguments();
             }
         }
 
-        if (count($notCondition) > 1) {
-            $result[] = $newLink = new Link('else', $notCondition);
-            $newLink->setChildren($default);
+        if (!$hasElse) {
+            $newStructure[] = (object) [
+                'condition' => [],
+                'value' => $default,
+                'type' => 'else',
+            ];
         }
 
-        return $result;
+        return new Link('if', [$newStructure, $values]);
     }
 
     /**
-     * @param Link[] $structure
-     * @param \Closure|null $callback
+     * @param object[] $structure
+     * @param Link $default
+     * @param array $switch
+     * @return Link
+     */
+    private static function createSingleSwitchConditions(array $structure, Link $default, array $switch)
+    {
+        $values = [$default];
+        $default = new Link('set', [0]);
+        $defaultConditions = ['or'];
+        $newStructure = [];
+        $hasDefault = false;
+
+        foreach ($structure as $item) {
+            $isDefault = $item->link->getName() === 'default';
+
+            if (isset($item->children)) {
+                if (count($defaultConditions) > 1) {
+                    $newStructure[] = (object) [
+                        'condition' => $defaultConditions,
+                        'value' => $default,
+                        'type' => 'case',
+                    ];
+                    $defaultConditions = ['or'];
+                }
+
+                if ($isDefault) {
+                    $hasDefault = true;
+                }
+
+                $newStructure[] = (object) [
+                    'condition' => $item->link->getArguments(),
+                    'value' => new Link('set', [count($values)]),
+                    'type' => $item->link->getName(),
+                ];
+
+                $values[] = [self::createSingleDefaultConditions($item->children, $default)];
+            }
+            elseif (!$isDefault) {
+                $defaultConditions[] = $item->link->getArguments();
+            }
+        }
+
+        if (!$hasDefault) {
+            $newStructure[] = (object) [
+                'condition' => [],
+                'value' => $default,
+                'type' => 'default',
+            ];
+        }
+        elseif (count($defaultConditions) > 1) {
+            $newStructure[] = (object) [
+                'condition' => $defaultConditions,
+                'value' => $default,
+                'type' => 'case',
+            ];
+        }
+
+        return new Link('switch', [$switch, $newStructure, $values]);
+    }
+
+    /**
+     * @param object[] $structure
+     * @param Link $default
+     * @return Link
+     */
+    private static function createSingleDefaultConditions(array $structure, Link $default)
+    {
+        if (!count($structure)) {
+            return $default;
+        }
+
+        $lastItem = array_pop($structure);
+
+        if ($lastItem->link->getName() === 'set') {
+            return $lastItem->link;
+        }
+
+        if (count($structure)) {
+            $default = self::createSingleDefaultConditions($structure, $default);
+        }
+        /**
+         * 1) одинаковые блоки с условиями и возвратом передаются
+         *    в качесвтве альтернативных условий в следующие блоки
+         *
+         * 2) таким образом один блок может быть множественно повторен
+         *
+         * 3) способы решения проблемы:
+         * 3.1) вместо блока передаем число
+         * 3.2) если возвращается число, то конвертируем в блок условий
+         *
+         * п.с таким образом можем решить и логику с break
+         */
+
+        switch ($lastItem->link->getName()) {
+            case 'if':
+                return self::createSingleIfConditions($lastItem->children, $default);
+            case 'switch':
+                return self::createSingleSwitchConditions(
+                    $lastItem->children, $default, $lastItem->link->getArguments()
+                );
+            default:
+                return self::createSingleDefaultConditions($lastItem->children, $default);
+        }
+    }
+
+    /**
+     * @param object[][] $structure
+     * @param \Closure $callback
      *
      * @return Link[][]
      */
-    private static function createStructuresByFields(array $structure, \Closure $callback = null)
+    private static function createStructuresByFields(array $structure, \Closure $callback)
     {
-        $result = self::findAllResults($structure);
-        $fieldValues = [];
-
         foreach ($structure as $fieldName => $conditions) {
-            $result[$fieldName] = self::createSingleConditions(
-                $conditions, $callback
-                ? function() use($callback, $fieldName, &$fieldValues) {
-                    if (!array_key_exists($fieldName, $fieldValues)) {
-                        $fieldValues[$fieldName] = $callback($fieldName);
-                    }
+            if (is_null($callback)) {
+                $default = new Link('set', [null]);
+            }
+            else {
+                $default = $callback($fieldName);
 
-                    return $fieldValues[$fieldName];
+                if (is_array($default)) {
+                    $default = new Link('set', $default);
                 }
-                : null
+                elseif (!$default instanceof Link) {
+                    $default = new Link('set', [$default]);
+                }
+            }
+
+            $structure[$fieldName] = self::createSingleDefaultConditions(
+                $conditions, $default
             );
         }
 
-        return $result;
+        return $structure;
     }
 
     /**
@@ -224,27 +320,20 @@ class LogicStructureConverter
      *
      * @return Link[]
      */
-    private static function argumentsToObjects(array $structure, $isIfBlock = false)
+    private static function argumentsToObjects(array $structure)
     {
         $result = [];
 
         foreach ($structure as $link) {
-            switch ($name = $link->getName(Link::TYPE_LOWER)) {
-                case 'break':
-                    $result[] = new Link($name, max(1, (int) reset($link->getArguments())));
-                    break;
-                case 'set':
-                    $result[] = $link;
-                    break;
-                case 'if':
-                    if (!$isIfBlock) {
-                        $result = array_merge($result, self::argumentsToObjects($link->getArguments(), true));
-                        break;
-                    }
-                default:
-                    $result[] = $newLink = new Link($name, [$link]);
-                    $newLink->setChildren(self::argumentsToObjects($link->getChildren()));
-                    $link->setChildren([]);
+            $name = $link->getName(Link::TYPE_LOWER);
+
+            if ($name === 'set') {
+                $result[] = $link;
+            }
+            else {
+                $result[] = $newLink = new Link($name, [$link]);
+                $newLink->setChildren(self::argumentsToObjects($link->getChildren()));
+                $link->setChildren([]);
             }
         }
 
@@ -258,7 +347,7 @@ class LogicStructureConverter
     private static function switchToBreakPoint(Link $switch)
     {
         /**
-         * s(c) 1 2 d 3
+         * s(c) 1 2 d 3 => array_search(c, [1,2,3]) d = 0
          * breakPoint {
          *   if (c != 3) {
          *     if (c in 1 2) {
@@ -271,6 +360,95 @@ class LogicStructureConverter
          *   }
          *   //3
          * }
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         * if (c1) {
+         *   //1
+         *   if (c2) {
+         *     //2
+         *     break
+         *   }
+         * }
+         * //3
+         *
+         * if (c1) {
+         *   //1
+         *   if (c2) {
+         *     //2
+         *   }
+         * }
+         * if (!c2) {
+         *   //3
+         * }
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         *
+         * -------
+         *
+         * if (c in 1) {
+         *   //1
+         * }
+         * if (c in 1 2) {
+         *   //2
+         * }
+         * if (c in 1 2 0) {
+         *   //d
+         * }
+         * if (c in 1 2 0 3) {
+         *   //3
+         * }
+         *
+         *
+         * if
+         *
+         * if
+         *
+         *
+         *
          */
         $prev = [];
         $allConditions = [];
@@ -421,8 +599,9 @@ class LogicStructureConverter
                     $chainConditions = [];
                     break;
             }
-
-            $link->setChildren(self::getRidOfBreak($link->getChildren(), $newBreaks = []));
+            
+            $newBreaks = [];
+            $link->setChildren(self::getRidOfBreak($link->getChildren(), $newBreaks));
 
             if ($name === 'breakPoint') {
                 $result = array_merge($result, $link->getChildren());
