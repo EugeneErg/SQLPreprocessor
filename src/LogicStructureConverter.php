@@ -599,7 +599,7 @@ class LogicStructureConverter
                     $chainConditions = [];
                     break;
             }
-            
+
             $newBreaks = [];
             $link->setChildren(self::getRidOfBreak($link->getChildren(), $newBreaks));
 

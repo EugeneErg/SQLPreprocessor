@@ -454,65 +454,37 @@ class Builder
     ) {
         /**
          * select - word, string, field, record
-         * update, insert, delete - field, record
          *
-         * необходимо получить условия извлечения - те условия, при которых действия вообще возможны
-         * и условия обновления
-         * и установить дефолтные значения для
+         * update, insert - field, record
+         *
+         * delete has't set conditions
+         *
          */
         LogicStructureConverter::toList(
             $structure,
             function(Link $link) use($rootAsRaw, $container, $type) {
+                $arguments = $link->getArguments();
 
+                if (!count($arguments)) {
+                    throw new \Exception('invalid setter');
+                }
+
+                $field = array_shift($arguments);
+
+                if ($rootAsRaw) {
+
+                }
+                else {
+
+                }
+
+                return [$fieldName, new Link('set', $arguments)];
             },
-            function($fieldName) use($rootAsRaw, $container, $type) {
-
-            }
+            $type === 'update' ?
+                function($fieldName) use($container) {
+                    return $container->$fieldName;
+                } : null
         );
-
-
-        /**
-         * if
-         * switch
-         * action
-         *
-         * arguments =
-         *
-         *
-         * to switch conditions
-         *
-         * for select, update, insert
-         *
-         * `field` = condition()
-         * or var.`field` = condition()
-         */
-
-        /**
-         * from(
-         *  if (cond1)
-         *     q
-         *
-         *
-         * )$var
-         *
-         *
-         *
-         * Важны не только условия установки конкретного поля, но и последовательность(или нет?)
-         *
-         * поля не влияют друг на друга
-         * важен анализ вложенности break-ов
-         *
-         * собираем условия для каждого поля отдельно
-         * включая бряки
-         *
-         * как собрать switch?
-         *
-         *
-         */
-
-
-
-
     }
 
     /**

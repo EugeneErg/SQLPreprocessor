@@ -1,35 +1,41 @@
 <?php namespace EugeneErg\SQLPreprocessor\Record;
 
 use EugeneErg\SQLPreprocessor\Hasher;
-use EugeneErg\SQLPreprocessor\HashesTrait;
-use EugeneErg\SQLPreprocessor\Link;
 
 /**
- * Class Record
+ * Class Container
+ * @package EugeneErg\SQLPreprocessor\Mutator
  */
 class Container
 {
-    use HashesTrait;
+    const TYPE_METHOD = 'method';
+    const TYPE_PROPERTY = 'property';
+    const TYPE_INITIATOR = null;
 
     /**
-     * @var Link[]
+     * @var ?string
      */
-    private $sequence = [];
+    private $type;
 
     /**
-     * @var self[]
+     * @var string
      */
-    private $children = [];
+    private $name;
 
     /**
      * @var array
      */
-    private $arguments = [];
+    private $arguments;
 
     /**
-     * @var self[][]
+     * @var string
      */
-    private $methods = [];
+    private $hash;
+
+    /**
+     * @var array
+     */
+    private $containers;
 
     /**
      * @var self[]
@@ -37,120 +43,165 @@ class Container
     private $path = [];
 
     /**
+     * @var self[]
+     */
+    private $properties = [];
+
+    /**
+     * @var self[]
+     */
+    private $methods = [];
+
+    /**
+     * @var array
+     */
+    private $values = [];
+
+    /**
+     * @var AbstractRecord
+     */
+    private $record;
+
+    /**
      * @var \Closure
      */
     private $callback;
 
     /**
-     * self constructor.
-     * @param \Closure $callback
+     * Container constructor.
+     * @param AbstractRecord $record
+     * @param array $containers
+     * @param \Closure|null $callback
      */
-    public function __construct(\Closure $callback)
+    public function __construct(AbstractRecord $record, array &$containers, \Closure $callback = null)
     {
+        $this->record = $record;
+        $this->containers = &$containers;
         $this->hash = Hasher::getHash($this);
-        $this->path = [$this];
         $this->callback = $callback;
+        $this->addContainer();
+    }
+
+    private function addContainer()
+    {
+        $this->containers[$this->hash] = function() {
+            $this->getChain();
+        };
     }
 
     /**
      * @param string $name
-     * @return self
+     * @return self mixed
      */
     public function __get($name)
     {
-        if (!isset($this->children[$name])) {
-            $new = clone $this;
-            $new->path[] = $new;
-            $new->sequence[] = new Link($name);
+        if (!isset($this->properties[$name])) {
             $callback = $this->callback;
-            $callback($new->path, $new->sequence);
-            $this->children[$name] = $new;
+            $new = $callback ? $callback(self::TYPE_PROPERTY, $name) : null;
+
+            if (is_null($new)) {
+                $new = clone $this;
+                $new->path[] = $this;
+                $new->name = $name;
+                $new->type = self::TYPE_PROPERTY;
+            }
+
+            $this->properties[$name] = $new;
         }
-        return $this->children[$name];
+
+        return $this->properties[$name];
     }
 
     /**
-     * @param string|int $offset
-     * @return self
-     * @throws \Exception
+     * @param array $arguments
+     * @return string
      */
-    public function offsetGet($offset = null)
+    private function getKey(array $arguments)
     {
-        if (func_num_args() !== 1 || !(is_int($offset) || is_string($offset))) {
-            return $this->__call('offsetGet', func_get_args());
+        $keys = [];
+
+        foreach ($arguments as $argument) {
+            $pos = array_search($argument, $this->values, true);
+
+            if ($pos === false) {
+                $pos = count($this->values);
+                $this->values[] = $argument;
+            }
+
+            $keys[] = $pos;
         }
-        return $this->__get($offset);
+
+        return implode('-', $keys);
     }
 
     /**
-     * @param string|[] $name
+     * @param string $name
      * @param array $arguments
      * @return self
      */
     public function __call($name, array $arguments)
     {
-        $keys = [];
-        foreach ($arguments as $argument) {
-            $key = array_search($argument, $this->arguments, true);
-            if (is_null($key)) {
-                $key = count($this->arguments);
-                $this->arguments[] = $argument;
-            }
-            $keys[] = $key;
-        }
-
-        $key = implode('-', $keys);
+        $key = $this->getKey($arguments);
 
         if (!isset($this->methods[$name][$key])) {
-            $new = clone $this;
-            $new->path[] = $new;
-            $new->sequence[$name] = new Link(
-                $name,
-                $arguments,
-                true
-            );
             $callback = $this->callback;
-            $callback($new->path, $new->sequence);
+            $new = $callback ? $callback(self::TYPE_METHOD, $name, $arguments) : null;
+
+            if (is_null($new)) {
+                $new = clone $this;
+                $new->path[] = $this;
+                $new->name = $name;
+                $new->arguments = $arguments;
+                $new->type = self::TYPE_METHOD;
+            }
+
             $this->methods[$name][$key] = $new;
         }
+
         return $this->methods[$name][$key];
     }
 
-    /**
-     * @param mixed $offset
-     * @param mixed $value
-     * @return self
-     */
-    public function offsetSet($offset = null, $value = null)
+    private function __clone()
     {
-        return $this->__call('offsetSet', func_get_args());
+        $this->hash = Hasher::getHash($this);
+        $this->methods = [];
+        $this->properties = [];
+        $this->arguments = [];
+        $this->callback = null;
+        $this->addContainer();
     }
 
     /**
-     * @param mixed $offset
+     * @param mixed ...$arguments
      * @return self
      */
-    public function offsetUnset($offset = null)
+    public function __invoke(...$arguments)
     {
-        return $this->__call('offsetUnset', func_get_args());
+        return $this->__call('__invoke', $arguments);
     }
 
     /**
-     * @param mixed $offset
-     * @return self
+     * @return string
      */
-    public function offsetExists($offset = null)
+    public function __toString()
     {
-        return $this->__call('offsetExists', func_get_args());
+        return $this->hash;
     }
 
     /**
-     * __invoke block function is context
-     * @param mixed ...$params
-     * @return self
+     * @return AbstractRecord
+     * @throws \Exception
      */
-    public function __invoke(...$params)
+    private function getChain()
     {
-        return $this->__call('__invoke', $params);
+        if (is_null($this->record) && count($this->path)) {
+            $parent = AbstractRecord::find(end($this->path));
+            $container = $this->type === self::TYPE_METHOD
+                ? Method::create($this->name, $this->arguments, $parent)
+                : Property::create($this->name, $parent);
+            $this->record = AbstractRecord::find($container);
+        }
+
+        return $this->record;
     }
 }

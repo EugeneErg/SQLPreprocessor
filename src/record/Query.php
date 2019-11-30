@@ -1,32 +1,27 @@
 <?php namespace EugeneErg\SQLPreprocessor\Record;
 
-use EugeneErg\SQLPreprocessor\Hasher;
+use EugeneErg\SQLPreprocessor\Builder;
 
+/**
+ * Class Query
+ * @package EugeneErg\SQLPreprocessor\Record
+ */
 class Query extends AbstractRecord
 {
     /**
-     * @var AbstractRecord[]
+     * @var Builder
      */
-    private $useRecords = [];
-
-    public static function create()
-    {
-        return self::createContainer();
-    }
+    private $builder;
 
     /**
-     * @param AbstractRecord $record
+     * @param Builder $builder
+     * @return Container
      */
-    public function useRecord(AbstractRecord $record)
+    public static function create(Builder $builder)
     {
-        $this->useRecords[Hasher::getHash($record)] = $record;
-    }
+        $new= new self();
+        $new->builder = $builder;
 
-    /**
-     * @return AbstractRecord[]
-     */
-    public function getUsedRecords()
-    {
-        return $this->useRecords;
+        return $new->getContainer();
     }
 }

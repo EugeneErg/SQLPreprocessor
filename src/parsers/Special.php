@@ -4,12 +4,16 @@ use EugeneErg\SQLPreprocessor\Builder;
 use EugeneErg\SQLPreprocessor\Link;
 use EugeneErg\SQLPreprocessor\ParseException;
 use EugeneErg\SQLPreprocessor\Raw;
+use EugeneErg\SQLPreprocessor\Record\AbstractRecord;
 use EugeneErg\SQLPreprocessor\Record\Container;
 use EugeneErg\SQLPreprocessor\record\FieldTable;
 use EugeneErg\SQLPreprocessor\Record\Item;
+use EugeneErg\SQLPreprocessor\Record\Method;
+use EugeneErg\SQLPreprocessor\Record\Offset;
 use EugeneErg\SQLPreprocessor\Record\Query;
 use EugeneErg\SQLPreprocessor\Record\Table;
 use EugeneErg\SQLPreprocessor\Record\Variable;
+use EugeneErg\SQLPreprocessor\Record\Property;
 
 /**
  * Class Special
@@ -114,29 +118,35 @@ class Special extends ParserAbstract
         return $this->getFieldAttribute($item, $activeItem);
     }
 
-    private function getRectangularAttribute(Raw\Item\Rectangular $item, Container &$activeItem, &$num)
+    private function getRectangularAttribute(Raw\Item\Rectangular $item, Container &$activeItem = null, &$num)
     {
         if (!$activeItem) {
-            $activeItem = Item::create($item);
+            $activeItem = Variable::create($this->getSequence($item->getValue(), self::TYPE_ARGUMENT));
 
             return [];
         }
+
         if (isset($this->items[$num + 1])
             && $this->items[$num + 1] instanceof Raw\Item\Parenthesis
         ) {
-            $activeItem = $activeItem->__call($item,
-                $this->getSequence($this->items[$num + 1]->getValue(), self::TYPE_ARGUMENT)
+            $activeItem = Offset::create(
+                AbstractRecord::find($activeItem),
+                $this->getSequence($item->getValue(), self::TYPE_ARGUMENT),
+                $this->getSequence($this->items[$num + 1]->getValue(), self::TYPE_ARGUMENT),
             );
             $num++;
         }
         else {
-            $activeItem = $activeItem->__get($item);
+            $activeItem = Offset::create(
+                AbstractRecord::find($activeItem),
+                $this->getSequence($item->getValue(), self::TYPE_ARGUMENT)
+            );
         }
 
         return [];
     }
 
-    private function getMethodAttribute(Raw\Item\Method $item, &$activeItem, &$num)
+    private function getMethodAttribute(Raw\Item\Method $item, Container &$activeItem = null, &$num = 0)
     {
         if (!$activeItem) {
             throw ParseException::incorrectLink($item);
@@ -144,13 +154,17 @@ class Special extends ParserAbstract
         if (isset($this->items[$num + 1])
             && $this->items[$num + 1] instanceof Raw\Item\Parenthesis
         ) {
-            $activeItem = call_user_func_array(
-                [$activeItem, $item->getValue()],
-                $this->getSequence($this->items[$num + 1]->getValue(), self::TYPE_ARGUMENT)
+            $activeItem = Method::create(
+                $item->getValue(),
+                $this->getSequence(
+                    $this->items[$num + 1]->getValue(),
+                    self::TYPE_ARGUMENT
+                ),
+                AbstractRecord::find($activeItem)
             );
         }
         else {
-            $activeItem = $activeItem->{$item->getValue()};
+            $activeItem = Property::create($item->getValue(), $activeItem);
         }
 
         return [];

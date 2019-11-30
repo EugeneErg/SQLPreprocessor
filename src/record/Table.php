@@ -6,16 +6,27 @@
 class Table extends AbstractRecord
 {
     /**
+     * @var string
+     */
+    private $tableName;
+
+    /**
+     * @var string|null
+     */
+    private $baseName;
+
+    /**
      * @param string $tableName
      * @param string|null $baseName
      * @return Container
      */
     public static function create($tableName, $baseName = null)
     {
-        return self::createContainer((object) [
-            'tableName' => $tableName,
-            'baseName' => $baseName,
-        ]);
+        $new = new self();
+        $new->tableName = $tableName;
+        $new->baseName = $baseName;
+
+        return $new->getContainer();
     }
 
     /**
@@ -23,7 +34,7 @@ class Table extends AbstractRecord
      */
     public function getTableName()
     {
-        return $this->getObject()->tableName;
+        return $this->tableName;
     }
 
     /**
@@ -31,6 +42,6 @@ class Table extends AbstractRecord
      */
     public function getBaseName()
     {
-        return $this->getObject()->baseName;
+        return $this->baseName;
     }
 }

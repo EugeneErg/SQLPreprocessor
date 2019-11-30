@@ -18,6 +18,16 @@ class FieldTable extends AbstractRecord
     private $number;
 
     /**
+     * @var string
+     */
+    private $alias;
+
+    /**
+     * @var string[]
+     */
+    private $tableName;
+
+    /**
      * @param string $alias
      * @param string[]|string|null $tableName
      * @return Container
@@ -25,10 +35,11 @@ class FieldTable extends AbstractRecord
      */
     public static function create($alias, $tableName = null)
     {
-        return self::createContainer((object) [
-            'tableName' => (array) $tableName,
-            'alias' => $alias
-        ]);
+        $new = new self();
+        $new->alias = $alias;
+        $new->tableName = (array) $tableName;
+
+        return $new->getContainer();
     }
 
     /**
@@ -36,7 +47,7 @@ class FieldTable extends AbstractRecord
      */
     public function getTableName()
     {
-        return $this->getObject()->tableName;
+        return $this->tableName;
     }
 
     /**
@@ -44,7 +55,7 @@ class FieldTable extends AbstractRecord
      */
     public function getAlias()
     {
-        return $this->getObject()->alias;
+        return $this->alias;
     }
 
     /**
@@ -53,13 +64,15 @@ class FieldTable extends AbstractRecord
     public function setContext(Container $context)
     {
         $alias = $this->getAlias();
+
         if ($this->context) {
-            unset(self::$contexts[$this->context][$alias][$this->number]);
+            unset(self::$contexts["$this->context"][$alias][$this->number]);
         }
+
         $this->context = $context;
-        self::$contexts[$context][$alias][] = $this;
-        end(self::$contexts[$context][$alias]);
-        $this->number = key(self::$contexts[$context][$alias]);
+        self::$contexts["$context"][$alias][] = $this;
+        end(self::$contexts["$context"][$alias]);
+        $this->number = key(self::$contexts["$context"][$alias]);
     }
 
     /**
@@ -77,6 +90,6 @@ class FieldTable extends AbstractRecord
      */
     public static function getByContext(Container $context, $alias)
     {
-        return isset(self::$contexts[$context][$alias]) ? self::$contexts[$context][$alias] : [];
+        return isset(self::$contexts["$context"][$alias]) ? self::$contexts["$context"][$alias] : [];
     }
 }

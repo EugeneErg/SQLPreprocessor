@@ -8,6 +8,19 @@ use EugeneErg\SQLPreprocessor\Raw;
 use EugeneErg\SQLPreprocessor\Parsers\ParserAbstract;
 use EugeneErg\SQLPreprocessor\Topology;
 
+class test implements ArrayAccess
+{
+    private $qwe = 12;
+}
+
+$q = new test();
+
+var_dump(isset($q->qwe));
+
+
+die;
+
+
 
 $query = (new Topology([
     'if' => ['type' => Topology::SEQUENCE_TYPE, 'next' => ['elseif', 'else']],
